@@ -1,17 +1,18 @@
 import uproot
 import pandas as pd
 
+import awkward as ak
+
 ##load and skim dataframe a few events at a time (more memory efficient)
 def getDF(_tree, entrysteps=10, subdet=0, zside=1, layer=9, u=3, v=3):
     t = []
     branches=['hgcdigi_subdet','hgcdigi_zside','hgcdigi_layer','hgcdigi_waferu','hgcdigi_waferv','hgcdigi_cellu','hgcdigi_cellv','hgcdigi_wafertype','hgcdigi_data_BX1','hgcdigi_isadc_BX1','hgcdigi_data_BX2','hgcdigi_isadc_BX2','hgcdigi_toa_BX2']
 
-    for x in _tree.pandas.iterate(branches=branches,entrysteps=entrysteps):
-        #select just one wafer
-        selection = (x.hgcdigi_subdet==subdet) & (x.hgcdigi_zside==zside) & (x.hgcdigi_layer==layer) & (x.hgcdigi_waferu==u) & (x.hgcdigi_waferv==v)
-        t.append(x[selection])
+    x = _tree.arrays(branches)
+    selection = (x['hgcdigi_subdet']==subdet) & (x['hgcdigi_zside']==zside) & (x['hgcdigi_layer']==layer) & (x['hgcdigi_waferu']==u) & (x['hgcdigi_waferv']==v)
 
-    return pd.concat(t)
+    return ak.to_pandas(x[selection])
+
 
 def formatData(x):
     isTOT = 1-x.isadc
