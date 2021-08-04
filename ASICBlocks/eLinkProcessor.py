@@ -22,8 +22,7 @@ def unpackCommonModes(vHex):
     x = int(vHex,16)
     CM1 = x & ((2**10)-1)
     CM2 = x & ((2**10)-1)
-    CMAvg = int((CM1+CM2)/2)
-    return CM1, CM2, CMAvg
+    return CM1, CM2
 
 def unpackChannelData(vHex):
     x = int(vHex,16)
@@ -39,21 +38,21 @@ def unpackChannelData(vHex):
 
 # TODO
 # Order of this needs to be verified (just taking from wikipedia Hamming(7,4) page right now
-hammingCodes = {'0000':'0000000',
-                '1000':'1110000',
-                '0100':'0111100',
-                '0010':'0101010',
-                '1010':'1011010',
-                '0110':'1100110',
-                '1110':'0010110',
-                '0001':'1101001',
-                '1001':'0011001',
-                '0101':'0100101',
-                '1101':'1010101',
-                '0011':'1000011',
-                '1011':'0110011',
-                '0111':'0001111',
-                '1111':'1111111'}
+hammingCodes = {'0000':'00000000',
+                '1000':'01110000',
+                '0100':'00111100',
+                '0010':'00101010',
+                '1010':'01011010',
+                '0110':'01100110',
+                '1110':'00010110',
+                '0001':'01101001',
+                '1001':'00011001',
+                '0101':'00100101',
+                '1101':'01010101',
+                '0011':'01000011',
+                '1011':'00110011',
+                '0111':'00001111',
+                '1111':'01111111'}
 
 def formatChannelData(row, k, lam, beta, CE, CI, CIm1):
     if row.Ch==-1: return '',''
@@ -139,7 +138,7 @@ def formatChannelData(row, k, lam, beta, CE, CI, CIm1):
         return word, word40
 
 
-def eLinkProcessor(vals):
+def getReadCycle(vals):
 
     isDataStart = findHeaderWord(vals)
 
@@ -157,43 +156,133 @@ def eLinkProcessor(vals):
     for j in range(len(readStart)):
         readCycle[readStart[j]:readStop[j]] = readPattern[:readLen[j]]
 
+    return readCycle
+
+def getHeader(data, readCycle, i_eRx):
     # parse header information, setup columns for this data
     headerData = np.where(readCycle==70,
-                          np.vectorize(unpackHeader)(vals),
-                          np.where(readCycle<0,-1,np.nan))
+                          np.vectorize(unpackHeader)(data),
+                          np.nan)
 
-    dfLink = pd.DataFrame(headerData.T,columns=['BX','Evt','Orbit','Hamming'])
+    dfHeader = pd.DataFrame(headerData.T,columns=[f'BX_eRx{i_eRx}',f'Evt_eRx{i_eRx}',f'Orbit_eRx{i_eRx}',f'Hamming_eRx{i_eRx}'])
 
+    return dfHeader
+
+def getCommonMode(data, readCycle, i_eRx):
     #parse common mode words, populating CM1, CM2, and CM
     CM = np.where(readCycle==80,
-                  np.vectorize(unpackCommonModes)(vals),
-                  np.where(readCycle<0,-1,np.nan))
+                  np.vectorize(unpackCommonModes)(data),
+                  np.nan)
+#                  np.where(readCycle<0,-1,np.nan))
 
-    dfLink[['CM1','CM2','CMAvg']] = pd.DataFrame(CM.T,columns=['CM1','CM2','CMAvg'])
+    dfCommonMode = pd.DataFrame(CM.T,columns=[f'CM_{i_eRx*2}',f'CM_{i_eRx*2+1}'])
 
+    return dfCommonMode
+
+
+def getChannelData(data, readCycle):
+
+    #unpack channel data
     chData = np.where((readCycle>=0) & (readCycle<37),
-                      np.vectorize(unpackChannelData)(vals),
+                      np.vectorize(unpackChannelData)(data),
                       -1)
 
-    dfLink['Ch'] = np.where((readCycle>=0) & (readCycle<37),
-                            readCycle,
-                            -1)
+    Ch = np.where((readCycle>=0) & (readCycle<37),
+                  readCycle,
+                  -1)
 
-    dfLink[['TC','TP','ADCm1','ADC_TOT','TOA']] = pd.DataFrame(chData.T,columns=['TC','TP','ADCm1','ADC_TOT','TOA'])
+    dfChannel = pd.DataFrame(chData.T,columns=[f'TC',f'TP',f'ADCm1',f'ADC_TOT',f'TOA'])
 
-    dfLink = dfLink.fillna(method='ffill').astype(int)
+    dfChannel[f'Ch'] = Ch
 
-    # Need to encorprate these registes in a way that can be passed between.
-    # Likely will be csv files, thought this should wait for Cristian's implementation as well
-    k= 0.03125
-    lam=0.015625
-    beta=0.03125
-    CE = 10
-    CI = np.random.randint(10,size=37)
-    CIm1 = np.random.randint(6,size=37)
+    return dfChannel
 
-    channelData = dfLink.apply(formatChannelData,args=(k, lam, beta, CE, CI, CIm1),axis=1)
+def commonModeMuxAndAvg(dfCommonMode, CM_MUX):
+    #clean CM_MUX values
+    CM_MUX[CM_MUX>23]=23
+    CM_MUX[CM_MUX<0]=0
 
-    dfLink[['ChData_Short','ChData']] = pd.DataFrame(channelData.tolist(),columns=['ChData_Short','ChData'])
+    muxOrderedColumns = [f'CM_{i}' for i in CM_MUX]
+    dfCommonModeMuxed = dfCommonMode[muxOrderedColumns]
+    dfCommonModeMuxed.columns = [f'CM_{i}' for i in range(24)]
 
-    return dfLink
+    dfCommonModeMuxed['CM_AVG'] = dfCommonModeMuxed.mean(axis=1)
+
+    #common mode average groupings
+    cm_avg_group = [['CM_0','CM_1','CM_2','CM_3'],
+                    ['CM_4','CM_5','CM_6','CM_7'],
+                    ['CM_8','CM_9','CM_10','CM_11'],
+                    ['CM_12','CM_13','CM_14','CM_15'],
+                    ['CM_16','CM_17','CM_18','CM_19'],
+                    ['CM_20','CM_21','CM_22','CM_23']]
+
+    for i in range(6):
+        dfCommonModeMuxed[f'CM_AVG_{i}'] = dfCommonModeMuxed[cm_avg_group[i]].mean(axis=1)
+
+    return dfCommonModeMuxed[['CM_AVG'] + [f'CM_AVG_{i}' for i in range(6)]]
+
+def eLinkProcessor(df_eRx, k=1., lam=1., beta=1., CE=10, CI=np.array([10]*37), CIm1=np.array([10]*37), CM_MUX=np.arange(24)):
+
+    dfHeader = pd.DataFrame(index=df_eRx.index)
+    dfCommonMode = pd.DataFrame(index=df_eRx.index)
+    dfChannelData = [] #pd.DataFrame(index=df_eRx.index)
+
+    data = df_eRx['eRx0'].values
+    readCycle = getReadCycle(data)
+    for i_eRx in range(12):
+        data = df_eRx[f'eRx{i_eRx}'].values
+
+        dfHeader = dfHeader.join(getHeader(data,readCycle,i_eRx))
+        dfCommonMode = dfCommonMode.join(getCommonMode(data,readCycle,i_eRx))
+        dfChannelData.append(getChannelData(data,readCycle))
+
+    #compare all BX/Evt/Orbit numbers take most common
+    dfHeader.dropna(how='all',inplace=True)
+    dfHeader['BX'] = dfHeader[[f'BX_eRx{i}' for i in range(12)]].mode(axis=1)
+    dfHeader['Evt'] = dfHeader[[f'Evt_eRx{i}' for i in range(12)]].mode(axis=1)
+    dfHeader['Orbit'] = dfHeader[[f'Orbit_eRx{i}' for i in range(12)]].mode(axis=1)
+
+    dfCommonMode.dropna(how='all',inplace=True)
+    dfCM_AVG = commonModeMuxAndAvg(dfCommonMode, CM_MUX)
+
+    # mapping to which CM average gets used for each eRx
+    # Question: Is this going to be programmable, or will be fixed
+    CM_AVG_Map = {0 : 'CM_AVG_0',
+                  1 : 'CM_AVG_0',
+                  2 : 'CM_AVG_1',
+                  3 : 'CM_AVG_1',
+                  4 : 'CM_AVG_2',
+                  5 : 'CM_AVG_2',
+                  6 : 'CM_AVG_3',
+                  7 : 'CM_AVG_3',
+                  8 : 'CM_AVG_4',
+                  9 : 'CM_AVG_4',
+                  10: 'CM_AVG_5',
+                  11: 'CM_AVG_5'}
+
+    dfDataList = []
+
+    sramChannelMap=pd.read_csv("PingPongSRAMChannelMap.csv")[["eRx","Ch","SRAM"]]
+    for i_eRx in range(12):
+        dfLink = dfChannelData[i_eRx] #[f'TC_eRx{i_eRx}',f'TP_eRx{i_eRx}',f'ADCm1_eRx{i_eRx}',f'ADC_TOT_eRx{i_eRx}',f'TOA_eRx{i_eRx}',f'Ch_eRx{i_eRx}']]
+        dfLink.columns = ['TC','TP','ADCm1','ADC_TOT','TOA','Ch']
+
+        #get CM Avg, and forward fill to all of the following channels
+        dfLink['CMAvg'] = dfCM_AVG[CM_AVG_Map[i_eRx]]
+        dfLink['CMAvg'] = dfLink.CMAvg.fillna(method='ffill')
+
+        channelData = dfLink.apply(formatChannelData,args=(k, lam, beta, CE, CI, CIm1),axis=1)
+
+        ###FINISH FROM HERE
+        dfLink[[f'ChData_Short',f'ChData']] = pd.DataFrame(channelData.tolist(),columns=[f'ChData_Short',f'ChData'])
+        dfLink.loc[:,'eRx'] = i_eRx
+        dfLink = dfLink[['eRx','Ch','ChData_Short','ChData']].reset_index()
+        dfLink.columns = ['CLK','eRx','Ch','ChData_Short','ChData']
+        dfDataList.append(dfLink)
+
+    dfFormattedData = pd.concat(dfDataList)
+
+    dfFormattedData= dfFormattedData.merge(sramChannelMap,on=['eRx','Ch'],how='left')[['CLK','Ch','SRAM','eRx','ChData_Short','ChData']]
+
+    return dfHeader, dfCommonMode, dfCM_AVG, dfFormattedData
+
