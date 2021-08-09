@@ -61,6 +61,7 @@ def formatChannelData(row, k, lam, beta, CE, CI, CIm1):
     TC = row.TC==1
     TP = row.TP==1
 
+    passZSbit = '1'
     if TC: #Automatic full readout for TCTP=11 or Invalid Code (TCTCP=10)
         word = '{0:01b}'.format(TC)
         word += '{0:01b}'.format(TP)
@@ -73,70 +74,62 @@ def formatChannelData(row, k, lam, beta, CE, CI, CIm1):
         else:
             word40 = word + hammingCodes['1000']
 
-        return word, word40
-
-    if TP: #No ZS or BX-1 ZS applied, but TOA suppresed for TCTP=01
+    elif TP: #No ZS or BX-1 ZS applied, but TOA suppresed for TCTP=01
         word = '0010'
         word += '{0:010b}'.format(row.ADCm1)
         word += '{0:010b}'.format(row.ADC_TOT)
 
         word40 = word + '00000000' + hammingCodes['0010']
 
-        return word, word40
+    else:
+        threshold = ((int(lam*row.CMAvg)>>6) +
+                     (int(k*row.ADCm1)>>5) +
+                     CI[row.Ch] )
 
-    threshold = ((int(lam*row.CMAvg)>>6) +
-                 (int(k*row.ADCm1)>>5) +
-                 CI[row.Ch] )
+        passZS = (row.ADC_TOT + CE) > threshold
 
-    passZS = (row.ADC_TOT + CE) > threshold
+        passZSm1 = row.ADCm1 > (8*CIm1[row.Ch] + (int(beta * row.CMAvg)>>7))
 
-    if not passZS: #fails ZS
-        word = ''
+        passZSTOA = row.TOA>0
 
-        word40 = '{0:032b}'.format(0) + hammingCodes['1111']
+        if not passZS: #fails ZS
+            word = ''
 
-        return word, word40
+            word40 = '{0:032b}'.format(0) + hammingCodes['1111']
 
-    passZSm1 = row.ADCm1 > (8*CIm1[row.Ch] + (int(beta * row.CMAvg)>>7))
+            passZSbit = '0'
 
-    passZSTOA = row.TOA>0
+        elif (passZSm1) and (not passZSTOA): #TOA ZS
+            word = '0000'
+            word += '{0:010b}'.format(row.ADCm1)
+            word += '{0:010b}'.format(row.ADC_TOT)
 
-    if (passZSm1) and (not passZSTOA): #TOA ZS
-        word = '0000'
-        word += '{0:010b}'.format(row.ADCm1)
-        word += '{0:010b}'.format(row.ADC_TOT)
+            word40 = word + '00000000' + hammingCodes['0000']
 
-        word40 = word + '00000000' + hammingCodes['0000']
+        elif (not passZSm1) and (not passZSTOA): #ADC(-1) and TOA ZS
+            word = '0001'
+            word += '{0:010b}'.format(row.ADC_TOT)
+            word += '00'
 
-        return word, word40
+            word40 = word + '00000000' + '00000000' + hammingCodes['0001']
 
-    if (not passZSm1) and (not passZSTOA): #ADC(-1) and TOA ZS
-        word = '0001'
-        word += '{0:010b}'.format(row.ADC_TOT)
-        word += '00'
+        elif (not passZSm1) and (passZSTOA): #ADC(-1) ZS
+            word = '0011'
+            word += '{0:010b}'.format(row.ADC_TOT)
+            word += '{0:010b}'.format(row.TOA)
 
-        word40 = word + '00000000' + '00000000' + hammingCodes['0001']
+            word40 = word + '00000000' + hammingCodes['0011']
 
-        return word, word40
+        elif passZSm1 and passZSTOA: #ADC(-1), ADC, TOA pass ZS
+            word = '01'
+            word += '{0:010b}'.format(row.ADCm1)
+            word += '{0:010b}'.format(row.ADC_TOT)
+            word += '{0:010b}'.format(row.TOA)
 
-    if (not passZSm1) and (passZSTOA): #ADC(-1) ZS
-        word = '0011'
-        word += '{0:010b}'.format(row.ADC_TOT)
-        word += '{0:010b}'.format(row.TOA)
+            word40 = word + hammingCodes['0100']
 
-        word40 = word + '00000000' + hammingCodes['0011']
 
-        return word, word40
-
-    if passZSm1 and passZSTOA: #ADC(-1), ADC, TOA pass ZS
-        word = '01'
-        word += '{0:010b}'.format(row.ADCm1)
-        word += '{0:010b}'.format(row.ADC_TOT)
-        word += '{0:010b}'.format(row.TOA)
-
-        word40 = word + hammingCodes['0100']
-
-        return word, word40
+    return word, word40, passZSbit
 
 
 def getReadCycle(vals):
@@ -222,6 +215,81 @@ def commonModeMuxAndAvg(dfCommonMode, CM_MUX):
 
     return dfCommonModeMuxed[['CM_AVG'] + [f'CM_AVG_{i}' for i in range(6)]]
 
+def formatEventPacketHeaderWords(row):
+    word0 = '{0:06b}'.format(row.headerCounter)
+    word0 += '{0:014b}'.format(0) #packet length and header filled in during formatter
+    word0 += '{0:012b}'.format(row.eRxStatus)
+
+    word1 = '{0:012b}'.format(row.BX)
+    word1 += '{0:06b}'.format(row.Evt)
+    word1 += '{0:03b}'.format(row.Orbit)
+
+    word1 += '{0:01b}'.format(row.E)
+    word1 += '{0:02b}'.format(row.HT)
+    word1 += '{0:02b}'.format(row.EBO)
+    word1 += '{0:01b}'.format(row.M)
+    word1 += '{0:01b}'.format(0)  #set truncation bit to 0 here, would be replaced in buffer?
+    word1 += '{0:04b}'.format(0) #zero padding at end
+
+    return word0, word1
+
+def formatSubpacketHeaderWords(row):
+    words = []
+
+    for i_eRx in range(12):
+        word  = '{0:03b}'.format(row[f'Stat_eRx{i_eRx}'])
+        word += '{0:03b}'.format(row[f'Hamming_eRx{i_eRx}'])
+        word += '{0:01b}'.format(0)
+        word += '{0:010b}'.format(row[f'CM_{i_eRx*2}'])
+        word += '{0:010b}'.format(row[f'CM_{i_eRx*2+1}'])
+        word += row[f'ChannelMap_{i_eRx}'][0:5]
+        words.append(word)
+
+        word = row[f'ChannelMap_{i_eRx}'][5:37]
+        words.append(word)
+
+    return words
+
+def headerProcessor(dfHeaderInput, dfCM, dfChannelMap):
+    df = dfHeaderInput[['BX','Evt','Orbit']].astype(int)
+    df['headerCounter'] = np.arange(len(df))%32
+    df['eRxStatus'] = 0
+
+    df['E'] = 0
+    df['HT'] = 0
+    df['EBO'] = 0
+    df['M'] = 0
+
+    eventPacketHeaderWords = df.apply(formatEventPacketHeaderWords, axis=1)
+
+    dfHeaderWords = pd.DataFrame(eventPacketHeaderWords.tolist(),index=eventPacketHeaderWords.index,columns=['EvtPacketHeader_0','EvtPacketHeader_1'])
+
+
+    dfCM = dfCM.reset_index().astype(int)
+    #move index up by one, to match the clk of the header
+    dfCM['index'] = dfCM['index']-1
+    dfCM.set_index('index',inplace=True)
+
+    #merge hamming codes, common modes, and address maps
+    df = dfChannelMap.merge(dfHeaderInput[[f'Hamming_eRx{i}' for i in range(12)]].astype(int),left_index=True,right_index=True)
+    df = df.merge(dfCM,left_index=True,right_index=True)
+
+    #set all status values to 0, need to check if this is good
+    for i_eRx in range(12):
+        df[f'Stat_eRx{i_eRx}'] = 0
+
+    SubPacketColumns = []
+    for i in range(12):
+        SubPacketColumns.append('SubHdr_eRx{i}_0')
+        SubPacketColumns.append('SubHdr_eRx{i}_1')
+
+    subPacketHeaderWords = df.apply(formatSubpacketHeaderWords, axis=1)
+
+    subpacketColumns = np.array([[f'SubpacketHeader_eRx{i}_0', f'SubpacketHeader_eRx{i}_1'] for i in range(12)]).flatten()
+    dfHeaderWords[subpacketColumns] = pd.DataFrame(subPacketHeaderWords.tolist(),index=subPacketHeaderWords.index,columns=subpacketColumns)
+
+    return dfHeaderWords
+
 def eLinkProcessor(df_eRx, k=1., lam=1., beta=1., CE=10, CI=np.array([10]*37), CIm1=np.array([10]*37), CM_MUX=np.arange(24)):
 
     dfHeader = pd.DataFrame(index=df_eRx.index)
@@ -230,6 +298,8 @@ def eLinkProcessor(df_eRx, k=1., lam=1., beta=1., CE=10, CI=np.array([10]*37), C
 
     data = df_eRx['eRx0'].values
     readCycle = getReadCycle(data)
+
+    # idea to check, will eRx's be individually selectable?  Should we include register, selecting which eRx are used?
     for i_eRx in range(12):
         data = df_eRx[f'eRx{i_eRx}'].values
 
@@ -275,15 +345,32 @@ def eLinkProcessor(df_eRx, k=1., lam=1., beta=1., CE=10, CI=np.array([10]*37), C
         channelData = dfLink.apply(formatChannelData,args=(k, lam, beta, CE, CI, CIm1),axis=1)
 
         ###FINISH FROM HERE
-        dfLink[[f'ChData_Short',f'ChData']] = pd.DataFrame(channelData.tolist(),columns=[f'ChData_Short',f'ChData'])
+        dfLink[['ChData_Short','ChData','passZS']] = pd.DataFrame(channelData.tolist(),columns=['ChData_Short','ChData','passZS'])
         dfLink.loc[:,'eRx'] = i_eRx
-        dfLink = dfLink[['eRx','Ch','ChData_Short','ChData']].reset_index()
-        dfLink.columns = ['CLK','eRx','Ch','ChData_Short','ChData']
+        dfLink = dfLink[['eRx','Ch','ChData_Short','ChData','passZS']].reset_index()
+        dfLink.columns = ['CLK','eRx','Ch','ChData_Short','ChData','passZS']
         dfDataList.append(dfLink)
 
     dfFormattedData = pd.concat(dfDataList)
 
-    dfFormattedData= dfFormattedData.merge(sramChannelMap,on=['eRx','Ch'],how='left')[['CLK','Ch','SRAM','eRx','ChData_Short','ChData']]
+    dfFormattedData= dfFormattedData.merge(sramChannelMap,on=['eRx','Ch'],how='left')[['CLK','Ch','SRAM','eRx','ChData_Short','ChData','passZS']]
 
-    return dfHeader, dfCommonMode, dfCM_AVG, dfFormattedData
+    dfPassZSBits = dfFormattedData.loc[dfFormattedData.Ch>-1,['CLK','eRx','Ch','passZS']].copy()
+
+    #set to the clock cycle of the beginning of the header, to merge into the
+    dfPassZSBits.CLK = dfPassZSBits.CLK - dfPassZSBits.Ch - 2
+
+    dfChannelMap = pd.DataFrame(index=dfPassZSBits.CLK.unique())
+
+    #select each eRx individually
+    for i_eRx in range(12):
+        df = dfPassZSBits.loc[dfPassZSBits.eRx==i_eRx]
+
+        #pivot to make each column the ZS decision for a given channel
+        df = df.pivot(index='CLK',columns='Ch',values='passZS')
+        dfChannelMap[f'ChannelMap_{i_eRx}'] = df.apply(lambda x: ''.join(x.values),axis=1)
+
+    dfHeaderWords = headerProcessor(dfHeader, dfCommonMode, dfChannelMap)
+
+    return dfHeader, dfCommonMode, dfCM_AVG, dfFormattedData, dfChannelMap, dfHeaderWords
 
