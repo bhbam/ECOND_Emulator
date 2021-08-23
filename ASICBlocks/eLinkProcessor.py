@@ -55,7 +55,8 @@ hammingCodes = {'0000':'00000000',
                 '0111':'00011110',
                 '1111':'11111111'}
 
-def formatChannelData(row, k, lam, beta, CE, CI, CIm1):
+#@numba.vectorize
+def formatChannelData(row, k, lam, beta, CE, CI, CIm1, asHex=True):
     if row.Ch==-1: return '',''
 
     TC = row.TC==1
@@ -129,6 +130,14 @@ def formatChannelData(row, k, lam, beta, CE, CI, CIm1):
             word40 = word + hammingCodes['0100']
 
 
+    if asHex:
+        if len(word)==16:
+            word = '{0:04x}'.format(int(word,2))
+        elif len(word)==24:
+            word = '{0:06x}'.format(int(word,2))
+        elif len(word)==32:
+            word = '{0:08x}'.format(int(word,2))
+        word40 = '{0:010x}'.format(int(word40,2))
     return word, word40, passZSbit
 
 
@@ -215,7 +224,7 @@ def commonModeMuxAndAvg(dfCommonMode, CM_MUX):
 
     return dfCommonModeMuxed[['CM_AVG'] + [f'CM_AVG_{i}' for i in range(6)]]
 
-def formatEventPacketHeaderWords(row):
+def formatEventPacketHeaderWords(row, asHex=True):
     word0 = '{0:06b}'.format(row.headerCounter)
     word0 += '{0:014b}'.format(0) #packet length and header filled in during formatter
     word0 += '{0:012b}'.format(row.eRxStatus)
@@ -231,9 +240,13 @@ def formatEventPacketHeaderWords(row):
     word1 += '{0:01b}'.format(0)  #set truncation bit to 0 here, would be replaced in buffer?
     word1 += '{0:04b}'.format(0) #zero padding at end
 
+    if asHex:
+        word0 = '{0:08x}'.format(int(word0,2))
+        word1 = '{0:08x}'.format(int(word1,2))
+
     return word0, word1
 
-def formatSubpacketHeaderWords(row):
+def formatSubpacketHeaderWords(row, asHex=True):
     words = []
 
     for i_eRx in range(12):
@@ -243,9 +256,11 @@ def formatSubpacketHeaderWords(row):
         word += '{0:010b}'.format(row[f'CM_{i_eRx*2}'])
         word += '{0:010b}'.format(row[f'CM_{i_eRx*2+1}'])
         word += row[f'ChannelMap_{i_eRx}'][0:5]
+        if asHex: word = '{0:08x}'.format(int(word,2))
         words.append(word)
 
         word = row[f'ChannelMap_{i_eRx}'][5:37]
+        if asHex: word = '{0:08x}'.format(int(word,2))
         words.append(word)
 
     return words
@@ -342,7 +357,7 @@ def eLinkProcessor(df_eRx, k=1., lam=1., beta=1., CE=10, CI=np.array([10]*37), C
         dfLink['CMAvg'] = dfCM_AVG[CM_AVG_Map[i_eRx]]
         dfLink['CMAvg'] = dfLink.CMAvg.fillna(method='ffill')
 
-        channelData = dfLink.apply(formatChannelData,args=(k, lam, beta, CE, CI, CIm1),axis=1)
+        channelData = dfLink.apply(formatChannelData, args=(k, lam, beta, CE, CI, CIm1),axis=1)
 
         ###FINISH FROM HERE
         dfLink[['ChData_Short','ChData','passZS']] = pd.DataFrame(channelData.tolist(),columns=['ChData_Short','ChData','passZS'])
