@@ -13,14 +13,17 @@ eRxInputs.columns = ['HardReset','SoftReset']+[f'eRx{i}'for i in range(12)]+['Fa
 print('Begin eLink Processor')
 dfHeader, dfCommonMode, dfCM_AVG, dfChannelData, dfChannelMap, dfHeaderWords = eLinkProcessor(eRxInputs)
 print('Ended eLink Processor')
-dfHeader.to_csv('output/header.csv')
+dfHeaderWords.index.name='CLK'
+dfHeaderWords.to_csv('output/header.csv')
+dfCommonMode.index.name='CLK'
+dfCM_AVG.index.name='CLK'
 dfCommonMode.to_csv('output/commonMode.csv')
 dfCM_AVG.to_csv('output/commonModeAverages.csv')
-dfChannelData.to_csv('output/channelData.csv')
+dfChannelData.to_csv('output/channelData.csv', index=False)
 
 print('Begin SRAM')
 
-#dfSRAM = fillSRAM(dfChannelData)
-#dfSRAM.to_csv('output/sram.csv')
+dfSRAM = fillSRAM(dfChannelData)
+dfSRAM.to_csv('output/sram.csv')
 
 print('DONE')
