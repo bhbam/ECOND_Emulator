@@ -56,40 +56,38 @@ hammingCodes = {'0000':'00000000',
                 '1111':'11111111'}
 
 #@numba.vectorize
-def formatChannelData(row, k, lam, beta, CE, CI, CIm1, asHex=True):
+def formatChannelData(row, k, lam, beta, CE, CI, CIm1, forcePassZS, forcePassZSm1, toaSaveAll, asHex=True):
     if row.Ch==-1: return '',''
 
     TC = row.TC==1
     TP = row.TP==1
 
     passZSbit = '1'
+
     if TC: #Automatic full readout for TCTP=11 or Invalid Code (TCTCP=10)
-        word = '{0:01b}'.format(TC)
-        word += '{0:01b}'.format(TP)
-        word += '{0:010b}'.format(row.ADCm1)
+        word  = '{0:010b}'.format(row.ADCm1)
         word += '{0:010b}'.format(row.ADC_TOT)
         word += '{0:010b}'.format(row.TOA)
 
         if TP:
-            word40 = word + hammingCodes['1100']
+            word40 = word + '00' + hammingCodes['1100']
         else:
-            word40 = word + hammingCodes['1000']
+            word40 = word + '00' + hammingCodes['1000']
 
     elif TP: #No ZS or BX-1 ZS applied, but TOA suppresed for TCTP=01
-        word = '0010'
-        word += '{0:010b}'.format(row.ADCm1)
+        word  = '{0:010b}'.format(row.ADCm1)
         word += '{0:010b}'.format(row.ADC_TOT)
 
-        word40 = word + '00000000' + hammingCodes['0010']
+        word40 = word + '000000000000' + hammingCodes['0010']
 
     else:
         threshold = ((int(lam*row.CMAvg)>>6) +
                      (int(k*row.ADCm1)>>5) +
                      CI[row.Ch] )
 
-        passZS = (row.ADC_TOT + CE) > threshold
+        passZS = ((row.ADC_TOT + CE) > threshold) | forcePassZS[row.Ch]
 
-        passZSm1 = row.ADCm1 > (8*CIm1[row.Ch] + (int(beta * row.CMAvg)>>7))
+        passZSm1 = (row.ADCm1 > (8*CIm1[row.Ch] + (int(beta * row.CMAvg)>>7))) | forcePassZSm1[row.Ch]
 
         passZSTOA = row.TOA>0
 
@@ -101,33 +99,36 @@ def formatChannelData(row, k, lam, beta, CE, CI, CIm1, asHex=True):
             passZSbit = '0'
 
         elif (passZSm1) and (not passZSTOA): #TOA ZS
-            word = '0000'
-            word += '{0:010b}'.format(row.ADCm1)
+            word  = '{0:010b}'.format(row.ADCm1)
             word += '{0:010b}'.format(row.ADC_TOT)
 
-            word40 = word + '00000000' + hammingCodes['0000']
+            word40 = word + '000000000000' + hammingCodes['0000']
 
         elif (not passZSm1) and (not passZSTOA): #ADC(-1) and TOA ZS
-            word = '0001'
-            word += '{0:010b}'.format(row.ADC_TOT)
+            word  = '{0:010b}'.format(row.ADC_TOT)
             word += '00'
 
-            word40 = word + '00000000' + '00000000' + hammingCodes['0001']
+            word40 = word + '00000000000000000000' + hammingCodes['0001']
 
         elif (not passZSm1) and (passZSTOA): #ADC(-1) ZS
-            word = '0011'
-            word += '{0:010b}'.format(row.ADC_TOT)
-            word += '{0:010b}'.format(row.TOA)
+            if toaSaveAll: #option to transmit ADCm1 every time TOA is sent
+                word  = '{0:010b}'.format(row.ADCm1)
+                word += '{0:010b}'.format(row.ADC_TOT)
+                word += '{0:010b}'.format(row.TOA)
 
-            word40 = word + '00000000' + hammingCodes['0011']
+                word40 = word + '00' + hammingCodes['0100']
+            else:
+                word  = '{0:010b}'.format(row.ADC_TOT)
+                word += '{0:010b}'.format(row.TOA)
+
+                word40 = word + '000000000000' + hammingCodes['0011']
 
         elif passZSm1 and passZSTOA: #ADC(-1), ADC, TOA pass ZS
-            word = '01'
-            word += '{0:010b}'.format(row.ADCm1)
+            word  = '{0:010b}'.format(row.ADCm1)
             word += '{0:010b}'.format(row.ADC_TOT)
             word += '{0:010b}'.format(row.TOA)
 
-            word40 = word + hammingCodes['0100']
+            word40 = word + '00' + hammingCodes['0100']
 
 
     if asHex:
@@ -178,7 +179,7 @@ def getCommonMode(data, readCycle, i_eRx):
                   np.nan)
 #                  np.where(readCycle<0,-1,np.nan))
 
-    dfCommonMode = pd.DataFrame(CM.T,columns=[f'CM_{i_eRx*2}',f'CM_{i_eRx*2+1}'])
+    dfCommonMode = pd.DataFrame(CM.T,columns=[f'CM_{i_eRx}_0',f'CM_{i_eRx}_1'])
 
     return dfCommonMode
 
@@ -202,11 +203,15 @@ def getChannelData(data, readCycle):
 
 def commonModeMuxAndAvg(dfCommonMode, CM_MUX):
     #clean CM_MUX values
-    CM_MUX[CM_MUX>23]=23
+    CM_MUX[CM_MUX>11]=11
     CM_MUX[CM_MUX<0]=0
 
-    muxOrderedColumns = [f'CM_{i}' for i in CM_MUX]
+    muxOrderedColumns = []
+    for i in CM_MUX:
+        muxOrderedColumns.append(f'CM_{i}_0')
+        muxOrderedColumns.append(f'CM_{i}_1')
     dfCommonModeMuxed = dfCommonMode[muxOrderedColumns]
+    #rename outputs, for convenientgrouping
     dfCommonModeMuxed.columns = [f'CM_{i}' for i in range(24)]
 
     dfCommonModeMuxed['CM_AVG'] = dfCommonModeMuxed.mean(axis=1)
@@ -253,8 +258,8 @@ def formatSubpacketHeaderWords(row, asHex=True):
         word  = '{0:03b}'.format(row[f'Stat_eRx{i_eRx}'])
         word += '{0:03b}'.format(row[f'Hamming_eRx{i_eRx}'])
         word += '{0:01b}'.format(0)
-        word += '{0:010b}'.format(row[f'CM_{i_eRx*2}'])
-        word += '{0:010b}'.format(row[f'CM_{i_eRx*2+1}'])
+        word += '{0:010b}'.format(row[f'CM_{i_eRx}_0'])
+        word += '{0:010b}'.format(row[f'CM_{i_eRx}_1'])
         word += row[f'ChannelMap_{i_eRx}'][0:5]
         if asHex: word = '{0:08x}'.format(int(word,2))
         words.append(word)
@@ -305,11 +310,24 @@ def headerProcessor(dfHeaderInput, dfCM, dfChannelMap):
 
     return dfHeaderWords
 
-def eLinkProcessor(df_eRx, k=1., lam=1., beta=1., CE=10, CI=np.array([10]*37), CIm1=np.array([10]*37), CM_MUX=np.arange(24)):
+def eLinkProcessor(df_eRx,
+                   k=1., lam=1., beta=1., CE=10,
+                   CI=np.array([10]*37*12),
+                   CIm1=np.array([10]*37*12),
+                   CM_MUX=np.arange(12),
+                   forcePassZS=np.array([False]*37*12),
+                   forcePassZSm1=np.array([False]*37*12),
+                   toaSaveAll=np.array([False]*12),
+                   ):
 
     dfHeader = pd.DataFrame(index=df_eRx.index)
     dfCommonMode = pd.DataFrame(index=df_eRx.index)
     dfChannelData = [] #pd.DataFrame(index=df_eRx.index)
+
+    forcePassZS.shape=(12,37)
+    forcePassZSm1.shape=(12,37)
+    CI.shape=(12,37)
+    CIm1.shape=(12,37)
 
     data = df_eRx['eRx0'].values
     readCycle = getReadCycle(data)
@@ -357,7 +375,7 @@ def eLinkProcessor(df_eRx, k=1., lam=1., beta=1., CE=10, CI=np.array([10]*37), C
         dfLink['CMAvg'] = dfCM_AVG[CM_AVG_Map[i_eRx]]
         dfLink['CMAvg'] = dfLink.CMAvg.fillna(method='ffill')
 
-        channelData = dfLink.apply(formatChannelData, args=(k, lam, beta, CE, CI, CIm1),axis=1)
+        channelData = dfLink.apply(formatChannelData, args=(k, lam, beta, CE, CI[i_eRx], CIm1[i_eRx], forcePassZS[i_eRx], forcePassZSm1[i_eRx], toaSaveAll[i_eRx]),axis=1)
 
         ###FINISH FROM HERE
         dfLink[['ChData_Short','ChData','passZS']] = pd.DataFrame(channelData.tolist(),columns=['ChData_Short','ChData','passZS'])
