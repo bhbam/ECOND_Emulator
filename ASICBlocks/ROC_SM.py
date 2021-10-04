@@ -3,51 +3,7 @@ import numpy as np
 
 from .HeaderSyncCheck import headerSyncCheck
 from .EBO_Counters import eboCounter
-
-
-packetProcessing = {'EMPTYHEADER':'HOME',
-                    'STANDARDHEADER':'CM',
-                    'UNEXPECTEDHEADER':'CM',
-                    'CM':'CH0',
-                    'CH0':'CH1',
-                    'CH1':'CH2',
-                    'CH2':'CH3',
-                    'CH3':'CH4',
-                    'CH4':'CH5',
-                    'CH5':'CH6',
-                    'CH6':'CH7',
-                    'CH7':'CH8',
-                    'CH8':'CH9',
-                    'CH9':'CH10',
-                    'CH10':'CH11',
-                    'CH11':'CH12',
-                    'CH12':'CH13',
-                    'CH13':'CH14',
-                    'CH14':'CH15',
-                    'CH15':'CH16',
-                    'CH16':'CH17',
-                    'CH17':'CALIB',
-                    'CALIB':'CH18',
-                    'CH18':'CH19',
-                    'CH19':'CH20',
-                    'CH20':'CH21',
-                    'CH21':'CH22',
-                    'CH22':'CH23',
-                    'CH23':'CH24',
-                    'CH24':'CH25',
-                    'CH25':'CH26',
-                    'CH26':'CH27',
-                    'CH27':'CH28',
-                    'CH28':'CH29',
-                    'CH29':'CH30',
-                    'CH30':'CH31',
-                    'CH31':'CH32',
-                    'CH32':'CH33',
-                    'CH33':'CH34',
-                    'CH34':'CH35',
-                    'CH35':'CRC',
-                    'CRC':'HOME',
-                   }
+from .ROC_SM_StateDefinitions import StateToValMapping, packetStateProgression
 
 def L1A_Predictor(L1A,
                   L1A_latency_HGCROC,
@@ -111,7 +67,7 @@ def ROC_SM_L1A_PREDICTOR(simpleMode,
     arr_topNZS=np.array([0]*N,dtype=int)
     arr_L1AFifoEmpty=np.array([False]*N)
     arr_L1AFifoFull=np.array([False]*N)
-    
+
     L1AFIFO = np.array([[-1,-1,-1,-1]]*129)
     writePointer = 0
 
@@ -170,8 +126,8 @@ def ROC_SM_L1A_PREDICTOR(simpleMode,
             if AlignmentCounter>ALIGNMENT_STEP2_PERIOD:
                 state='HOME'
                 AlignmentCounter=-1
-        elif state in packetProcessing:
-            state=packetProcessing[state]
+        elif state in packetStateProgression:
+            state=packetStateProgression[state]
         else:
             print('Unknown State', state)
             #for now, just go back to home
@@ -206,11 +162,24 @@ def ROC_SM_L1A_PREDICTOR(simpleMode,
         arr_topNZS[i]=Top_NZS
         arr_L1AFifoEmpty[i]=L1A_FIFO_EMPTY
         arr_L1AFifoFull[i]=L1A_FIFO_FULL
-            
+
     return arr_state, arr_topEvent, arr_topBunch, arr_topOrbit, arr_topNZS, arr_L1AFifoEmpty, arr_L1AFifoFull
+
+def badWordCounter(State, GoodSyncWord, HardReset, SoftReset, ChipSync):
+    BadWordCount = np.zeros_like(State,dtype=int)
+    count = 0
+    for i in range(len(State)):
+        if State[i]=='HOME' and GoodSyncWord[i]==0:
+            count += 1
+        if HardReset[i]==0 or SoftReset[i]==0 or ChipSync[i]==1:
+            count = 0
+        BadWordCount[i] = count
+    return BadWordCount
+
 
 def ROC_DAQ_CONTROL(dfAlignerOutput,
                     dfFastCommands,
+                    activeChannels,
                     idlePattern,
                     idleHeader,
                     idleHeaderBC0,
@@ -218,22 +187,20 @@ def ROC_DAQ_CONTROL(dfAlignerOutput,
                     L1A_HGCROC_Latency,
                     L1A_Aligner_Latency,
                     MatchThreshold,
+                    BadWordThreshold,
                     ROC_SM_simpleMode,
                     Alignment_Step1_Period,
                     Alignment_Step2_Period):
 
-    
-#  *          I2C_RW_Active_Channels  (12-bit programmable number indicating which channels are active)
-#  *          I2C_RW_badWord_Threshold    (8-bit programmable number indicating the maximum number of badWords allowed before errorFlag_MissedPkt)
-#  *          I2C_RW_Align1Count      (15-bit Number of steps in the Align1 Count)
 
+    activeChannelMask = np.array([(activeChannels >> n) & 1 for n in range(12)], dtype=bool)
 
-
-    dfHeaderSync = headerSyncCheck(dfAlignerOutput, 
-                                   idlePattern=idlePattern, 
+    dfHeaderSync = headerSyncCheck(dfAlignerOutput,
+                                   idlePattern=idlePattern,
                                    idleHeader=idleHeader,
-                                   idleHeaderBC0=idleHeaderBC0, 
-                                   MatchThreshold=MatchThreshold)
+                                   idleHeaderBC0=idleHeaderBC0,
+                                   MatchThreshold=MatchThreshold,
+                                   activeChannelMask=activeChannelMask)
 
     dfEBO = eboCounter(dfFastCommands, BCR_Bucket_Default)
 
@@ -241,8 +208,8 @@ def ROC_DAQ_CONTROL(dfAlignerOutput,
     dfInput[['GoodSyncWord','GoodHeaderWord']] = dfHeaderSync[['GoodSyncWord','GoodHeaderWord']]
 
 
-    L1A_Header_Prediction = L1A_Predictor(L1A = dfInput.L1A.values, 
-                                          L1A_latency_HGCROC = L1A_HGCROC_Latency, 
+    L1A_Header_Prediction = L1A_Predictor(L1A = dfInput.L1A.values,
+                                          L1A_latency_HGCROC = L1A_HGCROC_Latency,
                                           L1A_latency_Aligner = L1A_Aligner_Latency)
 
 
@@ -263,29 +230,47 @@ def ROC_DAQ_CONTROL(dfAlignerOutput,
                                           ALIGNMENT_STEP1_PERIOD=Alignment_Step1_Period,
                                           ALIGNMENT_STEP2_PERIOD=Alignment_Step2_Period)
 
-    State, TopEvent, TopBunch, TopOrbit, TopNZS, L1AFifoEmpty, L1AFifoFull = ROC_SM_Outputs
+    StateText, TopEvent, TopBunch, TopOrbit, TopNZS, L1AFifoEmpty, L1AFifoFull = ROC_SM_Outputs
+
+    BadWordCount = badWordCounter(State = StateText,
+                                  GoodSyncWord = dfInput.GoodSyncWord.values,
+                                  HardReset = dfInput.HardReset.values,
+                                  SoftReset = dfInput.SoftReset.values,
+                                  ChipSync = dfInput.ChipSync.values)
+
+    #apply the mapping in StateToValMapping, to get the integer state from the Gray codes
+    StateValue = np.vectorize(StateToValMapping.get)(StateText)
+
+    #check for error flags (the last two should never actually occur in this emulator, but are none the less checked)
+    ErrMissedPacket = (BadWordCount>= BadWordThreshold).astype(int)
+    ErrBadBunch = (dfInput.Bunch.values>=3564).astype(int)
+    ErrBadState = (StateValue==None)
+
+    ErrFlags = (ErrBadBunch*1 + ErrBadState*2 + ErrMissedPacket*4)
 
     df_ROC_DAQ_Control = pd.DataFrame({'GoodHeaderWord' : dfInput.GoodHeaderWord.values,
-                  'GoodSyncWord' : dfInput.GoodSyncWord.values,
-                  'Event' : dfInput.Event.values,
-                  'Bunch' : dfInput.Bunch.values,
-                  'Orbit' : dfInput.Orbit.values,
-                  'State' : State,
-                  'TopEvent' : TopEvent,
-                  'TopBunch' : TopBunch,
-                  'TopOrbit' : TopOrbit,
-                  'TopNZS' : TopNZS,
-                  'L1AFifoEmpty' : L1AFifoEmpty,
-                  'L1AFifoFull' : L1AFifoFull,
-                  'Header_Predictor' : L1A_Header_Prediction,
-                  'Flag_Home' : (State=='HOME').astype(int),
-                  'Flag_Header' : ((State=='STANDARDHEADER')|(State=='UNEXPECTEDHEADER')).astype(int),
-                  'Flag_Unexpected' : (State=='UNEXPECTEDHEADER').astype(int),
-                  'Flag_Packet_Done' : (State=='CRC').astype(int),
-                  'Flag_Alignment_Done' : (State=='ALIGNSTEP2').astype(int),
-                  'Flag_Csynch' : (State=='CSYNC').astype(int),
-                 },
-                 index=dfInput.index
-                )
-    
+                                       'GoodSyncWord' : dfInput.GoodSyncWord.values,
+                                       'Event' : dfInput.Event.values,
+                                       'Bunch' : dfInput.Bunch.values,
+                                       'Orbit' : dfInput.Orbit.values,
+                                       'StateText' : StateText,
+                                       'State' : StateValue,
+                                       'TopEvent' : TopEvent,
+                                       'TopBunch' : TopBunch,
+                                       'TopOrbit' : TopOrbit,
+                                       'TopNZS' : TopNZS,
+                                       'L1AFifoEmpty' : L1AFifoEmpty,
+                                       'L1AFifoFull' : L1AFifoFull,
+                                       'Header_Predictor' : L1A_Header_Prediction,
+                                       'Flag_Home' : (StateText=='HOME').astype(int),
+                                       'Flag_Header' : ((StateText=='STANDARDHEADER')|(StateText=='UNEXPECTEDHEADER')).astype(int),
+                                       'Flag_Unexpected' : (StateText=='UNEXPECTEDHEADER').astype(int),
+                                       'Flag_Packet_Done' : (StateText=='CRC').astype(int),
+                                       'Flag_Alignment_Done' : (StateText=='ALIGNSTEP2').astype(int),
+                                       'Flag_CSynch' : (StateText=='CSYNC').astype(int),
+                                       'Error_Flags' : ErrFlags
+                                      },
+                                      index=dfInput.index
+                                     )
+
     return df_ROC_DAQ_Control
