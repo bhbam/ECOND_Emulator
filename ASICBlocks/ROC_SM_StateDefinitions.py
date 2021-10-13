@@ -1,5 +1,4 @@
-packetStateProgression = {'EMPTYHEADER':'HOME',
-                         'STANDARDHEADER':'CM',
+packetStateProgression = {'STANDARDHEADER':'CM',
                          'UNEXPECTEDHEADER':'CM',
                          'CM':'CH0',
                          'CH0':'CH1',

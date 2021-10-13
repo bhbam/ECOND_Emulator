@@ -10,10 +10,7 @@ def findHeaderWord(vals, N_eRx_Thresh, activeChannelMask):
 
     headerVote = (hasHeader.sum(axis=1) >= N_eRx_Thresh)
 
-    headerTrailerErr = np.zeros_like(vals)
-    headerTrailerErr[headerVote] = ~(hasHeader[headerVote])
-
-    return headerVote.astype(int), headerTrailerErr
+    return headerVote.astype(int)
 
 ##attempt at implementing something to match specifications in Specification_for_the_Sync_Check_Block.pdf
 def checkSync(df, idlePattern, idleHeader, idleHeaderBC0, N_threshold, activeChannelMask):
@@ -25,7 +22,6 @@ def headerSyncCheck(df, idlePattern='CCCCCCC', idleHeader='A', idleHeaderBC0='9'
     dfSyncHeader = checkSync(df, idlePattern, idleHeader, idleHeaderBC0, MatchThreshold, activeChannelMask)
     headerInfo = findHeaderWord(df.values,MatchThreshold, activeChannelMask)
 
-    dfSyncHeader['GoodHeaderWord'] = headerInfo[0]
-    dfSyncHeader[[f'HeaderError_eRx{i}' for i in range(12)]] = pd.DataFrame(headerInfo[1])
+    dfSyncHeader['GoodHeaderWord'] = headerInfo
 
     return dfSyncHeader
