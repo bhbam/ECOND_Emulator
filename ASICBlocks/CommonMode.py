@@ -58,36 +58,3 @@ def commonModeMuxAndAvg(dfCommonMode, CM_MUX, CM_Mask):
     df_CM_AVG['CM_AVG'] = CM_Total_Average
 
     return df_CM_AVG
-    # CM_Mask_Array = np.array([((CM_Mask>>i)&1)==1 for i in range(24)[::-1]])
-
-    # #clean CM_MUX values
-    # CM_MUX[CM_MUX>11]=11
-    # CM_MUX[CM_MUX<0]=0
-
-    # muxOrderedColumns = []
-    # for i in CM_MUX:
-    #     muxOrderedColumns.append(f'CM_{i}_0')
-    #     muxOrderedColumns.append(f'CM_{i}_1')
-    # dfCommonModeMuxed = dfCommonMode[muxOrderedColumns]
-    # #rename outputs, for convenientgrouping
-    # dfCommonModeMuxed.columns = [f'CM_{i}' for i in range(24)]
-
-    # #not an exact average, matches bit-shifting mean method from spec
-    # if isHDM:
-    #     dfCommonModeMuxed['CM_AVG'] = (dfCommonModeMuxed.sum(axis=1)*171/4096).astype(int)
-    # else:
-    #     dfCommonModeMuxed['CM_AVG'] = (dfCommonModeMuxed.sum(axis=1)*171/2048).astype(int)
-
-    # #common mode average groupings
-    # cm_avg_group = [['CM_0','CM_1','CM_2','CM_3'],
-    #                 ['CM_4','CM_5','CM_6','CM_7'],
-    #                 ['CM_8','CM_9','CM_10','CM_11'],
-    #                 ['CM_12','CM_13','CM_14','CM_15'],
-    #                 ['CM_16','CM_17','CM_18','CM_19'],
-    #                 ['CM_20','CM_21','CM_22','CM_23']]
-
-    # for i in range(6):
-    #     dfCommonModeMuxed[f'CM_AVG_{i}'] = (dfCommonModeMuxed[cm_avg_group[i]].sum(axis=1)/4).astype(int)
-
-    # return dfCommonModeMuxed[['CM_AVG'] + [f'CM_AVG_{i}' for i in range(6)]]
-

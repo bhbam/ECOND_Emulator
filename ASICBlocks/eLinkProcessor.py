@@ -46,46 +46,6 @@ def formatSubpacketHeaderWords(row, asHex=True):
 
     return words
 
-# def headerProcessor(dfHeaderInput, dfCM, dfChannelMap):
-#     df = dfHeaderInput[['BX','Evt','Orbit']].astype(int)
-#     df['headerCounter'] = np.arange(len(df))%32
-#     df['eRxStatus'] = 0
-
-#     df['E'] = 0
-#     df['HT'] = 0
-#     df['EBO'] = 0
-#     df['M'] = 0
-
-#     eventPacketHeaderWords = df.apply(formatEventPacketHeaderWords, axis=1)
-
-#     dfHeaderWords = pd.DataFrame(eventPacketHeaderWords.tolist(),index=eventPacketHeaderWords.index,columns=['EvtPacketHeader_0','EvtPacketHeader_1'])
-
-
-#     dfCM = dfCM.reset_index().astype(int)
-#     #move index up by one, to match the clk of the header
-#     dfCM['index'] = dfCM['index']-1
-#     dfCM.set_index('index',inplace=True)
-
-#     #merge hamming codes, common modes, and address maps
-#     df = dfChannelMap.merge(dfHeaderInput[[f'Hamming_eRx{i}' for i in range(12)]].astype(int),left_index=True,right_index=True)
-#     df = df.merge(dfCM,left_index=True,right_index=True)
-
-#     #set all status values to 0, need to check if this is good
-#     for i_eRx in range(12):
-#         df[f'Stat_eRx{i_eRx}'] = 0
-
-#     SubPacketColumns = []
-#     for i in range(12):
-#         SubPacketColumns.append('SubHdr_eRx{i}_0')
-#         SubPacketColumns.append('SubHdr_eRx{i}_1')
-
-#     subPacketHeaderWords = df.apply(formatSubpacketHeaderWords, axis=1)
-
-#     subpacketColumns = np.array([[f'SubpacketHeader_eRx{i}_0', f'SubpacketHeader_eRx{i}_1'] for i in range(12)]).flatten()
-#     dfHeaderWords[subpacketColumns] = pd.DataFrame(subPacketHeaderWords.tolist(),index=subPacketHeaderWords.index,columns=subpacketColumns)
-
-#     return dfHeaderWords
-
 def eLinkProcessor(df_eRx,
                    df_ROC_SM,
                    k=np.array([10]*37*12),
@@ -135,43 +95,6 @@ def eLinkProcessor(df_eRx,
                                reconMode = reconMode,
                                Error_Check = Error_Check,
                               )
-#     dfHeader = getHeader(data, State)
-#     dfHeader.dropna(how='all',inplace=True)
-
-#     #check subpacket HT status
-#     HTstatus = checkHTStatus(data,df_ROC_SM['GoodHeaderWord'].values)
-#     dfHeader[[f'HT_{i}' for i in range(12)]] = pd.DataFrame(HTstatus,index=dfHeader.index)
-#     dfHeader = dfHeader.astype(int)
-#     #get event HT status
-#     dfHeader['HT'] = np.where([[f'HT_{i}' for i in range(12)]].sum(axis=1)==12,3,2)
-
-#     #compare all BX/Evt/Orbit numbers take most common
-#     EvtNum, BxNum, OrbNum, EBO_flag, EBO_eRx_errBits = headerVerticalVoter(dfHeader[[f'BxEvtOrb_eRx{i}' for i in range(12)]].astype(int).values, N=N_eRx_Thresh)
-#     dfHeader[['Bunch_Vote','Event_Vote','Orbit_Vote','EBO_flag']] = pd.DataFrame({'Bunch_Vote':BxNum,
-#                                                                                   'Event_Vote':EvtNum,
-#                                                                                   'Orbit_Vote':OrbNum,
-#                                                                                   'EBO_flag':EBO_flag},
-#                                                                                  index=dfHeader.index)
-
-#     dfHeader[['TopEvent','TopBunch','TopOrbit']] = df_ROC_SM[['TopEvent','TopBunch','TopOrbit']]    
-
-#     #Event/Bunch/Orbit are the selected values to be transmitted in 
-#     dfHeader[['Event','Bunch','Orbit']] = EBOSelect(dfHeader, reconMode, activeChannelMask)
-#     dfHeader['BxEvtOrb'] = (dfHeader.Bunch.values<<9) + (dfHeader.Event.values<<3) + (dfHeader.Orbit.values) 
-#     #get Event Header Packet Match Bit
-#     dfHeader['EBOMatch'] = ((dfHeader.Event_Vote==dfHeader.TopEvent) & 
-#                          (dfHeader.Bunch_Vote==dfHeader.TopBunch) &
-#                          (dfHeader.Orbit_Vote==dfHeader.TopOrbit)).astype(int)
-#     #get Subpacket EBO Match Bit
-#     for i_eRx in range(12):
-#         dfHeader['EBOMatch_eRx{i_eRx}'] = dfHeader['BxEvtOrb_eRx{i_eRx}'] == dfHeader['BxEvtOrb']
-    
-    
-#     dfHeader['ExpectedEvent'] = (df_ROC_SM.StateText=='STANDARDHEADER')[df_ROC_SM.GoodHeaderWord==1]
-# #  *              Event_Status                (7-bit The E, HT, EBO, M, and T status of the event)
-
-
-    
     
     dfCommonMode = getCommonMode(data, State)
     dfCommonMode.dropna(how='all',inplace=True)
@@ -208,7 +131,7 @@ def eLinkProcessor(df_eRx,
 
         #get CM Avg
         dfLink['CMAvg'] = dfHeader[CM_AVG_Map[i_eRx]]
-#         dfLink['CMAvg'] = dfLink.CMAvg.fillna(method='ffill').fillna(0).astype(int)
+
         dfLink['TopNZS'] = NZS
 
         channelData = dfLink.apply(formatChannelData, 
@@ -235,26 +158,6 @@ def eLinkProcessor(df_eRx,
 
     dfFormattedData = dfFormattedData.pivot(index='CLK',columns='eRx',values=['passZS','ChData'])
     dfFormattedData.columns = [f'ChMap_{i}' for i in range(12)] + [f'ChData_{i}' for i in range(12)]
-
-#     sramChannelMap=pd.read_csv("PingPongSRAMChannelMap.csv")[["eRx","Ch","SRAM"]]
-#     dfFormattedData= dfFormattedDataO.merge(sramChannelMap,on=['eRx','Ch'],how='left')[['CLK','Ch','SRAM','eRx','ChData','passZS']]
-
-#     dfPassZSBits = dfFormattedData.loc[dfFormattedData.Ch>-1,['CLK','eRx','Ch','passZS']].copy()
-
-    #set to the clock cycle of the beginning of the header, to merge into the
-#     dfPassZSBits.CLK = dfPassZSBits.CLK - dfPassZSBits.Ch - 2
-
-#     dfChannelMap = pd.DataFrame(index=dfPassZSBits.CLK.unique())
-
-#     #select each eRx individually
-#     for i_eRx in range(12):
-#         df = dfPassZSBits.loc[dfPassZSBits.eRx==i_eRx]
-
-#         #pivot to make each column the ZS decision for a given channel
-#         df = df.pivot(index='CLK',columns='Ch',values='passZS')
-#         dfChannelMap[f'ChannelMap_{i_eRx}'] = df.apply(lambda x: ''.join(x.values),axis=1)
-
-#     dfHeaderWords = headerProcessor(dfHeader, dfCommonMode, dfChannelMap)
 
     c = ['Event', 'Bunch', 'Orbit', 'Event_Status', 'eRxStatus']
     c += [f'SubpacketStatus_eRx{i}' for i in range(12)]
