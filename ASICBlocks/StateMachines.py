@@ -37,41 +37,50 @@ def L1A_Predictor(L1A,
 
     return arr_Header_Predictor
 
-def ROC_SM_L1A_PREDICTOR(simpleMode,
-                         GoodHeaderWord,
-                         GoodSyncWord,
-                         LinkReset,
-                         ChipSync,
-                         EBR,
-                         L1A,
-                         NZS,
-                         Event,
-                         Bunch,
-                         Orbit,
-                         HardReset,
-                         SoftReset,
-                         L1A_Prediction,
-                         ALIGNMENT_STEP1_PERIOD=255,
-                         ALIGNMENT_STEP2_PERIOD=1,
-                         N=-1):
+def StateMachine_Loop(simpleMode,
+                      GoodHeaderWord,
+                      GoodSyncWord,
+                      LinkReset,
+                      ChipSync,
+                      EBR,
+                      L1A,
+                      NZS,
+                      Event,
+                      Bunch,
+                      Orbit,
+                      HardReset,
+                      SoftReset,
+                      L1A_Prediction,
+                      PingPong_Flush=None,
+                      ALIGNMENT_STEP1_PERIOD=255,
+                      ALIGNMENT_STEP2_PERIOD=1,
+                      N=-1):
 
     if N==-1:
         N=len(GoodHeaderWord)
 
+    if PingPong_Flush is None:
+        PingPong_Flush=np.zeros(N,dtype=bool)
+
     arr_state=np.array(['']*N,dtype='<U16')
-    arr_topEvent=np.array([0]*N,dtype=int)
-    arr_topBunch=np.array([0]*N,dtype=int)
-    arr_topOrbit=np.array([0]*N,dtype=int)
-    arr_topNZS=np.array([0]*N,dtype=int)
-    arr_L1AFifoEmpty=np.array([False]*N)
-    arr_L1AFifoFull=np.array([False]*N)
-    arr_L1AFifoFull=np.array([False]*N)
-    arr_EmptyHeaderFifo = np.array([[[-1,-1,-1,-1]]*8]*N,dtype=int)#.reshape(-1,8,4)
+    arr_topEvent=np.zeros(N,dtype=int)
+    arr_topBunch=np.zeros(N,dtype=int)
+    arr_topOrbit=np.zeros(N,dtype=int)
+    arr_topNZS=np.zeros(N,dtype=int)
+    arr_L1AFifoEmpty=np.zeros(N,dtype=bool)
+    arr_L1AFifoFull=np.zeros(N,dtype=bool)
+    arr_PacketComplete=np.zeros(N,dtype=int)
+    arr_EmptyHeader=np.zeros(N,dtype=int)
+    arr_EmptyHeaderFifo = np.array([[[-1,-1,-1,-1]]*8]*N,dtype=int)
+    arr_PP_SM = np.array(['']*N,dtype='<U2')
+    arr_PP_READ_STATE = np.array(['']*N,dtype='<U5')
+
 
     L1AFIFO = np.array([[-1,-1,-1,-1]]*129)
     writePointer = 0
 
     state='HOME'
+    stateNext='HOME'
     L1A_FIFO_EMPTY=True
     L1A_FIFO_FULL=False
     Top_Event=-1
@@ -82,67 +91,74 @@ def ROC_SM_L1A_PREDICTOR(simpleMode,
 
     emptyHeaderFifo = np.array([[-1,-1,-1,-1]]*9,dtype=int)
     EmptyHeaderFifoWritePointer = 0
-    
+
     AlignmentCounter=-1
+
+    PP_State='S0'
+    PP_StateNext='S0'
+    PP_Read_State='CLK0'
+    PP_Read_StateNext='CLK0'
+
+    HGCROC_Packet_Complete=False
 
     for i in range(N):
 
-        #ROCSM
+        ###########################
+        # ROC DAQ STATE MACHINE
+        ###########################
         if state == 'HOME':
             if not simpleMode:
                 if (L1A_Prediction[i]==1) and (GoodHeaderWord[i]==0):
-                    state='EMPTYHEADER'
+                    stateNext = 'EMPTYHEADER'
                 elif (L1A_Prediction[i]==1) and (GoodHeaderWord[i]==1):
-                    state='STANDARDHEADER'
+                    stateNext = 'STANDARDHEADER'
                 elif (L1A_Prediction[i]==0) and (GoodHeaderWord[i]==1):
-                    state='UNEXPECTEDHEADER'
+                    stateNext = 'UNEXPECTEDHEADER'
                 elif (ChipSync[i]==1) or (EBR[i]==1):
-                    state='CSYNC'
+                    stateNext = 'CSYNC'
                 elif (LinkReset[i]==1) and (GoodSyncWord[i]==1):
-                    state='ALIGNRESET'
+                    stateNext = 'ALIGNRESET'
                 else:
-                    state='HOME'
+                    stateNext = 'HOME'
             else:
                 if (GoodSyncWord[i]==0) and (GoodHeaderWord[i]==1) and (not L1A_FIFO_EMPTY):
-                    state='STANDARDHEADER'
+                    stateNext = 'STANDARDHEADER'
                 elif (GoodSyncWord[i]==0) and (GoodHeaderWord[i]==1) and (L1A_FIFO_EMPTY):
-                    state='UNEXPECTEDHEADER'
+                    stateNext = 'UNEXPECTEDHEADER'
                 elif (ChipSync[i]==1) or (EBR[i]==1):
-                    state='CSYNC'
+                    stateNext = 'CSYNC'
                 elif (LinkReset[i]==1) and (GoodSyncWord[i]==1):
-                    state='ALIGNRESET'
+                    stateNext = 'ALIGNRESET'
                 else:
-                    state='HOME'
+                    stateNext = 'HOME'
         elif state == 'EMPTYHEADER':
             if (L1A_Prediction[i]==0) and (GoodHeaderWord[i]==1):
-                state='UNEXPECTEDHEADER'
+                stateNext = 'UNEXPECTEDHEADER'
             else:
-                state='HOME'
-            emptyHeaderFifo[:-1] = emptyHeaderFifo[1:]
-            EmptyHeaderFifoWritePointer = max(EmptyHeaderFifoWritePointer-1,0)
+                stateNext = 'HOME'
 
         elif state == 'CSYNC':
             if GoodSyncWord[i]==1:
-                state='HOME'
+                stateNext = 'HOME'
             else:
-                state='CSYNC'
+                stateNext = 'CSYNC'
         elif state == 'ALIGNRESET':
             AlignmentCounter=0
-            state='ALIGNSTEP1'
+            stateNext = 'ALIGNSTEP1'
         elif state == 'ALIGNSTEP1':
             if AlignmentCounter>ALIGNMENT_STEP1_PERIOD:
-                state='ALIGNSTEP2'
+                stateNext = 'ALIGNSTEP2'
                 AlignmentCounter=0
         elif state == 'ALIGNSTEP2':
             if AlignmentCounter>ALIGNMENT_STEP2_PERIOD:
-                state='HOME'
+                stateNext = 'HOME'
                 AlignmentCounter=-1
         elif state in packetStateProgression:
-            state=packetStateProgression[state]
+            stateNext = packetStateProgression[state]
         else:
             print('Unknown State', state)
             #for now, just go back to home
-            state='HOME'
+            stateNext = 'HOME'
 
         if AlignmentCounter>=0:
             AlignmentCounter += 1
@@ -163,7 +179,6 @@ def ROC_SM_L1A_PREDICTOR(simpleMode,
             writePointer = max(writePointer-1, 0)
 
         if state=='EMPTYHEADER':
-            print('HERE')
             emptyHeaderFifo[EmptyHeaderFifoWritePointer] = L1AFIFO[0]
             EmptyHeaderFifoWritePointer += 1
 
@@ -171,9 +186,70 @@ def ROC_SM_L1A_PREDICTOR(simpleMode,
             L1AFIFO[:-1] = L1AFIFO[1:]
             writePointer = max(writePointer-1, 0)
 
-            
+
+        EmptyHeader = EmptyHeaderFifoWritePointer>0
+
+
+        ###########################
+        # Ping Pong State Machine
+        ###########################
+
+        # PingPong State
+        if PP_State=='S0':
+            if HGCROC_Packet_Complete:
+                PP_StateNext = 'S1'
+            else:
+                PP_StateNext = 'S0'
+        elif PP_State=='S1':
+            if HGCROC_Packet_Complete:
+                PP_StateNext = 'S3'
+            elif PingPong_Flush[i]:
+                PP_StateNext = 'S2'
+            else:
+                PP_StateNext = 'S1'
+        elif PP_State=='S2':
+            if HGCROC_Packet_Complete:
+                PP_StateNext = 'S3'
+            else:
+                PP_StateNext = 'S2'
+        else:
+            if HGCROC_Packet_Complete:
+                PP_StateNext = 'S1'
+            elif PingPong_Flush[i]:
+                PP_StateNext = 'S0'
+            else:
+                PP_StateNext = 'S3'
+
+        # PingPong Read State
+        if PP_Read_State=='CLK0':
+            if HGCROC_Packet_Complete:
+                PP_Read_StateNext = 'CLK1'
+            elif EmptyHeader:
+                PP_Read_StateNext = 'EMPTYHDR'
+            else:
+                PP_Read_StateNext = 'CLK0'
+        elif PP_Read_State=='EMPTYHDR':
+            PP_Read_StateNext = 'CLK0'
+            # peel off top of empty header fifo
+            emptyHeaderFifo[:-1] = emptyHeaderFifo[1:]
+            EmptyHeaderFifoWritePointer = max(EmptyHeaderFifoWritePointer-1,0)
+            EmptyHeader = EmptyHeaderFifoWritePointer>0
+        elif PP_Read_State=='CLK39':
+            PP_Read_StateNext = 'CLK0'
+        elif 'CLK' in PP_Read_State:
+            n = int(PP_Read_State[3:])+1
+            PP_Read_StateNext = f'CLK{n}'
+        else:
+            PP_Read_StateNext = 'CLK0'
+
+
         L1A_FIFO_EMPTY = (L1AFIFO==-1).all()
         L1A_FIFO_FULL = ~(L1AFIFO==-1).any()
+
+        HGCROC_Packet_Complete = state=='CRC'
+        state = stateNext
+        PP_State = PP_StateNext
+        PP_Read_State = PP_Read_StateNext
 
         #dump into arrays
         arr_state[i]=state
@@ -184,8 +260,14 @@ def ROC_SM_L1A_PREDICTOR(simpleMode,
         arr_L1AFifoEmpty[i] = L1A_FIFO_EMPTY
         arr_L1AFifoFull[i]  = L1A_FIFO_FULL
         arr_EmptyHeaderFifo[i] = emptyHeaderFifo[:8]
-        
-    return arr_state, arr_topEvent, arr_topBunch, arr_topOrbit, arr_topNZS, arr_L1AFifoEmpty, arr_L1AFifoFull, arr_EmptyHeaderFifo
+        arr_PacketComplete[i] = HGCROC_Packet_Complete
+        arr_EmptyHeader[i] = EmptyHeader
+
+        arr_PP_SM[i] = PP_State
+        arr_PP_READ_STATE[i] = PP_Read_State
+
+
+    return arr_state, arr_topEvent, arr_topBunch, arr_topOrbit, arr_topNZS, arr_L1AFifoEmpty, arr_L1AFifoFull, arr_PacketComplete, arr_EmptyHeader, arr_EmptyHeaderFifo, arr_PP_SM, arr_PP_READ_STATE
 
 def badWordCounter(State, GoodSyncWord, HardReset, SoftReset, ChipSync):
     BadWordCount = np.zeros_like(State,dtype=int)
@@ -235,24 +317,24 @@ def ROC_DAQ_CONTROL(dfAlignerOutput,
                                           L1A_latency_Aligner = L1A_Aligner_Latency)
 
 
-    ROC_SM_Outputs = ROC_SM_L1A_PREDICTOR(simpleMode = ROC_SM_simpleMode,
-                                          GoodHeaderWord = dfInput.GoodHeaderWord.values,
-                                          GoodSyncWord = dfInput.GoodSyncWord.values,
-                                          LinkReset = dfInput.LinkResetRocD.values,
-                                          ChipSync = dfInput.ChipSync.values,
-                                          EBR = dfInput.EBR.values,
-                                          L1A = dfInput.L1A.values,
-                                          NZS = dfInput.NZS.values,
-                                          Event = dfInput.Event.values,
-                                          Bunch = dfInput.Bunch.values,
-                                          Orbit = dfInput.Orbit.values,
-                                          HardReset = dfInput.HardReset.values,
-                                          SoftReset = dfInput.SoftReset.values,
-                                          L1A_Prediction=L1A_Header_Prediction,
-                                          ALIGNMENT_STEP1_PERIOD=Alignment_Step1_Period,
-                                          ALIGNMENT_STEP2_PERIOD=Alignment_Step2_Period)
+    StateMachine_Outputs = StateMachine_Loop(simpleMode = ROC_SM_simpleMode,
+                                             GoodHeaderWord = dfInput.GoodHeaderWord.values,
+                                             GoodSyncWord = dfInput.GoodSyncWord.values,
+                                             LinkReset = dfInput.LinkResetRocD.values,
+                                             ChipSync = dfInput.ChipSync.values,
+                                             EBR = dfInput.EBR.values,
+                                             L1A = dfInput.L1A.values,
+                                             NZS = dfInput.NZS.values,
+                                             Event = dfInput.Event.values,
+                                             Bunch = dfInput.Bunch.values,
+                                             Orbit = dfInput.Orbit.values,
+                                             HardReset = dfInput.HardReset.values,
+                                             SoftReset = dfInput.SoftReset.values,
+                                             L1A_Prediction=L1A_Header_Prediction,
+                                             ALIGNMENT_STEP1_PERIOD=Alignment_Step1_Period,
+                                             ALIGNMENT_STEP2_PERIOD=Alignment_Step2_Period)
 
-    StateText, TopEvent, TopBunch, TopOrbit, TopNZS, L1AFifoEmpty, L1AFifoFull, EmptyHeaderFifo = ROC_SM_Outputs
+    StateText, TopEvent, TopBunch, TopOrbit, TopNZS, L1AFifoEmpty, L1AFifoFull, PacketComplete, EmptyHeader, EmptyHeaderFifo, PP_State, PP_ReadState = StateMachine_Outputs
 
     BadWordCount = badWordCounter(State = StateText,
                                   GoodSyncWord = dfInput.GoodSyncWord.values,
@@ -284,7 +366,11 @@ def ROC_DAQ_CONTROL(dfAlignerOutput,
                                        'L1AFifoEmpty' : L1AFifoEmpty,
                                        'L1AFifoFull' : L1AFifoFull,
                                        'Header_Predictor' : L1A_Header_Prediction,
-                                       'EmptyHeaderTop' : EmptyHeaderFifo[:,0].tolist(),
+                                       'PacketComplete' : PacketComplete,
+                                       'EmptyHeader' : EmptyHeader,
+                                       'EmptyHeaderFifoTop' : EmptyHeaderFifo[:,0].tolist(),
+                                       'PP_State' : PP_State,
+                                       'PP_ReadState' : PP_ReadState,
                                        'Flag_Home' : (StateText=='HOME').astype(int),
                                        'Flag_Header' : ((StateText=='STANDARDHEADER')|(StateText=='UNEXPECTEDHEADER')).astype(int),
                                        'Flag_Unexpected' : (StateText=='UNEXPECTEDHEADER').astype(int),
@@ -297,6 +383,6 @@ def ROC_DAQ_CONTROL(dfAlignerOutput,
                                       index=dfInput.index
                                      )
 
-#    df_ROC_DAQ_Control['EmptyHeaderFIFO'] = df_ROC_DAQ_Control.apply(EmptyHeaderFifo,axis=1)
-
+    df_ROC_DAQ_Control['EmptyHeaderFIFOSize'] = 8-(EmptyHeaderFifo==-1).all(axis=2).sum(axis=1)
+    
     return df_ROC_DAQ_Control, EmptyHeaderFifo

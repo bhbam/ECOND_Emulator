@@ -56,7 +56,7 @@ def eboCounter(dfFastCommands, BCR_Bucket_Default=3513):
                 Orbit += 1
                 if Orbit >= 8:
                     Orbit = 0
-            if L1A[i-1]==1:
+            if L1A[i]==1:
                 Event += 1
                 if Event >= 64:
                     Event = 0
