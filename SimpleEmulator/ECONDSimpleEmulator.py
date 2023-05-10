@@ -14,7 +14,7 @@ def ECOND_Simple_Emulator(dfInput, dfCounters, startIndices, i2c, RR, debug=Fals
     chDatas = []
     eboGoods = []
     goodHeaderTrailers = []
-
+    ADCm1s, ADCorTOTs, TOAs=[],[],[]
     for startIdx in startIndices[:]:
         #     print(startIdx)
         d=dfInput.values[startIdx:(startIdx+40)]
@@ -22,7 +22,7 @@ def ECOND_Simple_Emulator(dfInput, dfCounters, startIndices, i2c, RR, debug=Fals
         inputHeaderWords=dfInput.iloc[startIdx][i2c.ERx_active].apply(int,base=16).values
 
         d[:,~i2c.ERx_active]='00000000'
-        goodHeaderTrailer, hammingErrors, orbitNum, eventNum, bunchNum, CM0, CM1, Tc, Tp, ADCm1, ADCorTOT, TOA, crcGood=parseDAQLink(d.T)
+        goodHeaderTrailer, hammingErrors, orbitNum, eventNum, bunchNum, CM0, CM1, Tc, Tp, ADCm1, ADCorTOT, TOA, crcGood=parseDAQLink(d.T,int(i2c.ROC_HdrMarker,16))
         CM0_padded=np.concatenate([CM0,[0,0,0,0]])
         CM1_padded=np.concatenate([CM1,[0,0,0,0]])
         ROC_CM_SUM=CM0_padded[i2c.CM_eRX_Route.reshape(6,2)].sum(axis=1)+CM1_padded[i2c.CM_eRX_Route.reshape(6,2)].sum(axis=1)
@@ -37,10 +37,10 @@ def ECOND_Simple_Emulator(dfInput, dfCounters, startIndices, i2c, RR, debug=Fals
                       i2c.CM_UserDef
                       ).reshape(12,1)
 
-        passZS = (ADCorTOT+i2c.ZS_ce) > (((A_CM*i2c.ZS_lambda)>>6) + ((ADCm1*i2c.ZS_kappa)>>5) + i2c.ZS_c)
+        passZS = (ADCorTOT+i2c.ZS_ce) > (((A_CM*i2c.ZS_lambda)>>5) + ((ADCm1*i2c.ZS_kappa)>>5) + i2c.ZS_c)
         passZS = passZS | i2c.ZS_pass | NZS
 
-        passZSm1 = ADCm1 > (8*i2c.ZS_m1_c + ((i2c.ZS_m1_beta*A_CM)>>7))
+        passZSm1 = ADCm1 > (8*i2c.ZS_m1_c + ((i2c.ZS_m1_beta*A_CM)>>5))
         passZSm1 = passZSm1 | i2c.ZS_m1_pass | NZS
         passZSm1 = passZSm1 & ~i2c.ZS_m1_mask
 
@@ -144,7 +144,10 @@ def ECOND_Simple_Emulator(dfInput, dfCounters, startIndices, i2c, RR, debug=Fals
             chDatas.append(chData)
             eboGoods.append(eboGood)
             goodHeaderTrailers.append(goodHeaderTrailer)
+            ADCm1s.append(ADCm1)
+            ADCorTOTs.append(ADCorTOT)
+            TOAs.append(TOA)
     if debug:
-        return emulatorPackets, chMaps, chDatas, eboGoods, goodHeaderTrailers
+        return emulatorPackets, chMaps, chDatas, eboGoods, goodHeaderTrailers, ADCm1s, ADCorTOTs, TOAs
     else:
         return emulatorPackets
