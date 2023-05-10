@@ -11,7 +11,11 @@ def parseI2C(i2cValues):
 
     i2c={}
 
-    i2c['ZS_ce']=int(i2cValues.I2C_RW_eRX_ZS_CE_Constants_eRXxx,16)
+    try:
+        i2c['ZS_ce']=int(i2cValues.I2C_RW_eRX_ZS_CE_Constants_eRXxx,16)
+    except:
+        i2c['ZS_ce']=0x0
+
     ZS_Constants=i2cValues[[f'I2C_RW_eRX_ZS_Constants_eRX{i}' for i in range(12)]].apply(int,base=16).values
     ZS_M1_Constants=i2cValues[[f'I2C_RW_eRX_ZS_M1_Constants_eRX{i}' for i in range(12)]].apply(int,base=16).values
 
@@ -37,4 +41,10 @@ def parseI2C(i2cValues):
     i2c['VReconstruct_thresh'] = int(i2cValues.I2C_RW_vReconstruct_thresh,16)
     i2c['Match_thresh'] = int(i2cValues.I2C_RW_MatchThreshold,16)
     i2c['EBO_ReconMode'] = int(i2cValues.I2C_RW_ReconMode_Result,16)
+
+    i2c['ROC_FirstSyncHeader']=i2cValues.I2C_RW_FirstSyncHeader
+    i2c['ROC_SyncHeader']=i2cValues.I2C_RW_SyncHeader
+    i2c['ROC_SyncBody']=i2cValues.I2C_RW_SyncBody
+    i2c['ROC_HdrMarker']=i2cValues.I2C_RW_hgcroc_hdr_marker
+
     return Dict2Class(i2c)

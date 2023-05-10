@@ -64,7 +64,11 @@ i2c_columns=['tb_top.test_harness.econd.econd_core_wrap_u.eLink_Word_Processors_
              'tb_top.test_harness.econd.econd_core_wrap_u.rocdaqctrl_resetrequest_wrap_u.roc_daq_ctrl_wrap_u.I2C_RW_MatchThreshold[3:0]',
              'tb_top.test_harness.econd.econd_core_wrap_u.eLink_Word_Processors_wrap_u.I2C_RW_vReconstruct_thresh[3:0]',
              'tb_top.test_harness.econd.ECOND_P1_Right_u.Formatter_wrapper_u.I2C_RW_Header_Marker[8:0]',
-             'tb_top.test_harness.econd.ECOND_P1_Right_u.Formatter_wrapper_u.I2C_RW_Idle_Pattern[23:0]']
+             'tb_top.test_harness.econd.ECOND_P1_Right_u.Formatter_wrapper_u.I2C_RW_Idle_Pattern[23:0]',
+             'tb_top.test_harness.econd.econd_core_wrap_u.rocdaqctrl_resetrequest_wrap_u.roc_daq_ctrl_wrap_u.I2C_RW_hgcroc_hdr_marker[3:0]',
+             'tb_top.test_harness.econd.econd_core_wrap_u.rocdaqctrl_resetrequest_wrap_u.roc_daq_ctrl_wrap_u.I2C_RW_FirstSyncHeader[3:0]',
+             'tb_top.test_harness.econd.econd_core_wrap_u.rocdaqctrl_resetrequest_wrap_u.roc_daq_ctrl_wrap_u.I2C_RW_SyncHeader[3:0]',
+             'tb_top.test_harness.econd.econd_core_wrap_u.rocdaqctrl_resetrequest_wrap_u.roc_daq_ctrl_wrap_u.I2C_RW_SyncBody[27:0]']
 
 
 new_i2c_columns=[y.replace('tb_top.test_harness.econd.econd_core_wrap_u.eLink_Word_Processors_wrap_u.eLink_Word_Processors_u.','')
