@@ -19,7 +19,7 @@ def parseIdle(Idle):
     Pattern=(Idle>>8)
     return Pattern, RR, Err, BuffStat
 
-def parseHeaderWord0(HeaderWord0):
+def parseHeaderWord0(HeaderWord0, returnDict=False):
     HdrMarker=(HeaderWord0>>23)&0x1ff
     PayloadLength=(HeaderWord0>>14)&0x1ff
     P=(HeaderWord0>>13)&0x1
@@ -29,16 +29,37 @@ def parseHeaderWord0(HeaderWord0):
     M=(HeaderWord0>>7)&0x1
     T=(HeaderWord0>>6)&0x1
     Hamming=(HeaderWord0>>0)&0x3f
-    return HdrMarker, PayloadLength, P, E, HT, EBO, M, T, Hamming
+    if returnDict:
+        return {"HdrMarker":HdrMarker, 
+                "PayloadLength":PayloadLength,
+                "P":P,
+                "E":E,
+                "HT":HT,
+                "EBO":EBO,
+                "M":M,
+                "T":T,
+                "Hamming":Hamming
+               }
+    else:
+        return HdrMarker, PayloadLength, P, E, HT, EBO, M, T, Hamming
 
-def parseHeaderWord1(HeaderWord1):
+def parseHeaderWord1(HeaderWord1, returnDict=False):
     BX=(HeaderWord1>>20)&0xfff
     L1A=(HeaderWord1>>14)&0x3f
     Orb=(HeaderWord1>>11)&0x7
     S=(HeaderWord1>>10)&0x1
     RR=(HeaderWord1>>8)&0x3
     CRC=(HeaderWord1)&0xff
-    return BX, L1A, Orb, S, RR, CRC
+    if returnDict:
+        return {"Bunch":BX,
+                "Event":L1A,
+                "Orbit":Orb,
+                "S":S,
+                "RR":RR,
+                "CRC":CRC}
+    else:
+        return BX, L1A, Orb, S, RR, CRC
+
 
 def parsePacketHeader(packetHeader0,packetHeader1=0,asHex=True):
     Stat=(packetHeader0>>29)&0x7
@@ -58,11 +79,11 @@ def parsePacketHeader(packetHeader0,packetHeader1=0,asHex=True):
 
 crc = crcmod.mkCrcFun(0x104c11db7,initCrc=0, xorOut=0, rev=False)
 
-def parseDAQLink(eLinkData):
+def parseDAQLink(eLinkData,hdr_marker=15):
     DAQ_eRx_int=np.vectorize(lambda x: int(x,16))(eLinkData)
     #parse header
     goodHeaderTrailer=(((((DAQ_eRx_int[:,0])&0b1111)==5) | (((DAQ_eRx_int[:,0])&0b1111)==2)) &
-                       (((DAQ_eRx_int[:,0]>>28)&0b1111)==5))
+                       (((DAQ_eRx_int[:,0]>>28)&0b1111)==hdr_marker))
     hammingErrors=(DAQ_eRx_int[:,0]>>4)&0b111
     orbitNum=(DAQ_eRx_int[:,0]>>7)&0b111
     eventNum=(DAQ_eRx_int[:,0]>>10)&0b111111
