@@ -1,6 +1,7 @@
 import codecs
 from SimpleEmulator.UnpackZSConstants import DIV_Factors
-from .ParseEtxOutputs import parseDAQLink, crc, parseIdle
+from .ParseEtxOutputs import parseIdle
+from .ParseErxInputs import parseDAQLink, crc
 from .PacketHeaderBuilder import processERXHeaders, buildHeaders
 
 import numpy as np
