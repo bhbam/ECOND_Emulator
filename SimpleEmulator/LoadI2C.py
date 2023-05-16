@@ -7,10 +7,14 @@ class Dict2Class(object):
         for key in my_dict:
             setattr(self, key, my_dict[key])
 
-def parseI2C(i2cValues):
+def parseI2C(i2cValues=None):
     """
     Function to convert i2c data from csv file output by UVM, and create i2c class with variables for all registers relavent for emulator
     """
+
+    if i2cValues is None:
+        return defaultI2Csettings()
+
     i2c={}
 
     try:
@@ -48,6 +52,48 @@ def parseI2C(i2cValues):
     i2c['ROC_SyncHeader']=i2cValues.I2C_RW_SyncHeader
     i2c['ROC_SyncBody']=i2cValues.I2C_RW_SyncBody
     i2c['ROC_HdrMarker']=i2cValues.I2C_RW_hgcroc_hdr_marker
+
+    return Dict2Class(i2c)
+
+def defaultI2Csettings():
+    i2c={}
+
+    i2c['ZS_ce']=0x0
+
+    ZS_Constants=i2cValues[[f'I2C_RW_eRX_ZS_Constants_eRX{i}' for i in range(12)]].apply(int,base=16).values
+    ZS_M1_Constants=i2cValues[[f'I2C_RW_eRX_ZS_M1_Constants_eRX{i}' for i in range(12)]].apply(int,base=16).values
+
+    i2c['ZS_lambda']=np.array([0x20]*12*37).reshape(12,37)
+    i2c['ZS_kappa']=np.array([0]*12*37).reshape(12,37)
+    i2c['ZS_c']=np.array([255]*12*37).reshape(12,37)
+    i2c['ZS_pass']=np.array([0]*12*37).reshape(12,37)
+    i2c['ZS_mask']=np.array([0]*12*37).reshape(12,37)
+    i2c['ZS_m1_c']=np.array([0xf]*12*37).reshape(12,37)
+    i2c['ZS_m1_beta']=np.array([0x20]*12*37).reshape(12,37)
+    i2c['ZS_m1_pass']=np.array([0]*12*37).reshape(12,37)
+    i2c['ZS_m1_mask']=np.array([0]*12*37).reshape(12,37)
+
+    i2c['CM_eRX_Route']=np.array([0,1,2,3,4,5,6,7,8,9,10,11])
+    i2c['CM_Selections']=np.array([6]*12)
+    i2c['CM_UserDef']=np.array([0]*12)
+
+    i2c['ERx_active']=np.array([1]*12,dtype=bool)
+    i2c['ETx_active']=np.array([1]*6,dtype=bool)
+
+    i2c['SimpleMode']=False
+    i2c['PassThruMode']=False
+
+    i2c['HeaderMarker']=0x1e6
+    i2c['IdlePattern']=0x555555
+
+    i2c['VReconstruct_thresh'] = 0
+    i2c['Match_thresh'] = 0
+    i2c['EBO_ReconMode'] = 0
+
+    i2c['ROC_FirstSyncHeader']=0x9
+    i2c['ROC_SyncHeader']=0xa
+    i2c['ROC_SyncBody']=0xaaaaaaa
+    i2c['ROC_HdrMarker']=0xf
 
     return Dict2Class(i2c)
 
