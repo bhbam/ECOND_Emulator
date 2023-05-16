@@ -106,7 +106,8 @@ def parseHeaderWord1(HeaderWord1, returnDict=False):
         return BX, L1A, Orb, S, RR, CRC
 
 
-def parsePacketHeader(packetHeader0,packetHeader1=0,asHex=True):
+
+def parsePacketHeader(packetHeader0,packetHeader1=0,asHex=True,returnDict=False):
     Stat=(packetHeader0>>29)&0x7
     Ham = (packetHeader0>>26)&0x7
     F=(packetHeader0>>25)&0x1
@@ -118,7 +119,18 @@ def parsePacketHeader(packetHeader0,packetHeader1=0,asHex=True):
         E=0
     ChMap=((packetHeader0&0x1f)<<32)+packetHeader1
     if asHex:
-        return f'{Stat:01x}',f'{Ham:01x}',f'{F:01x}',f'{CM0:03x}',f'{CM1:03x}',f'{E:01x}',f'{ChMap:010x}',
+        _stat, _ham, _f, _cm0, _cm1, _e, _chmap = f'{Stat:01x}',f'{Ham:01x}',f'{F:01x}',f'{CM0:03x}',f'{CM1:03x}',f'{E:01x}',f'{ChMap:010x}',
     else:
-        return Stat, Ham, F, CM0, CM1, E, ChMap
+        _stat, _ham, _f, _cm0, _cm1, _e, _chmap = Stat, Ham, F, CM0, CM1, E, ChMap
+
+    if returnDict:
+        return {"Stat":_stat,
+                "Ham" :_ham,
+                "F":_f,
+                "CM0":_cm0,
+                "CM1":_cm1,
+                "E":_e,
+                "ChMap":_chmap}
+    else:
+        return _stat, _ham, _f, _cm0, _cm1, _e, _chmap
 
