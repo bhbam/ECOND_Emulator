@@ -99,113 +99,156 @@ def convertI2CtoYAML(i2c, yamlName="i2cConfig.yaml"):
     Function to convert i2c class returned from parseI2C to a yaml file that can be used in chip testing
     """
 
+    if isinstance(i2c,Dict2Class):
+        i2c=vars(i2c)
+
     lines = ""
-    lines +=  "ZSCommon:\n"
-    lines +=  "  Global:\n"
-    lines +=  "    zs_ce:\n"
-    lines += f"      {i2c.ZS_ce}\n"
+
+    if 'ZS_ce' in i2c:
+        lines +=  "ZSCommon:\n"
+        lines +=  "  Global:\n"
+        lines +=  "    zs_ce:\n"
+        lines += f"      {i2c['ZS_ce']}\n"
 
 
-    lines += "ZS:\n"
-    for i in range(12):
-        lines += f"  {i}:\n"
-        lines += f"    zs_c_i:\n"
-        lines += f"      [{','.join([f'{x}' for x in i2c.ZS_c[i]])}]\n"
-        lines += f"    zs_lambda:\n"
-        lines += f"      [{','.join([f'{x}' for x in i2c.ZS_lambda[i]])}]\n"
-        lines += f"    zs_kapa:\n"
-        lines += f"      [{','.join([f'{x}' for x in i2c.ZS_kappa[i]])}]\n"
-        lines += f"    zs_pass_i:\n"
-        lines += f"      [{','.join([f'{x:b}' for x in i2c.ZS_pass[i]])}]\n"
-        lines += f"    zs_mask_i:\n"
-        lines += f"      [{','.join([f'{x:b}' for x in i2c.ZS_mask[i]])}]\n"
+    if any([x in i2c.keys() for x in ['ZS_lambda', 'ZS_kappa', 'ZS_c', 'ZS_pass', 'ZS_mask']]):
+        lines += "ZS:\n"
+        for i in range(12):
+            lines += f"  {i}:\n"
+            if 'ZS_c' in i2c:
+                lines += f"    zs_c_i:\n"
+                lines += f"      [{','.join([f'{x}' for x in i2c['ZS_c'][i]])}]\n"
+            if 'ZS_lambda' in i2c:
+                lines += f"    zs_lambda:\n"
+                lines += f"      [{','.join([f'{x}' for x in i2c['ZS_lambda'][i]])}]\n"
+            if 'ZS_lambda' in i2c:
+                lines += f"    zs_kapa:\n"
+                lines += f"      [{','.join([f'{x}' for x in i2c['ZS_kappa'][i]])}]\n"
+            if 'ZS_pass' in i2c:
+                lines += f"    zs_pass_i:\n"
+                lines += f"      [{','.join([f'{x:b}' for x in i2c['ZS_pass'][i]])}]\n"
+            if 'ZS_mask' in i2c:
+                lines += f"    zs_mask_i:\n"
+                lines += f"      [{','.join([f'{x:b}' for x in i2c['ZS_mask'][i]])}]\n"
+
+    if any([x in i2c.keys() for x in ['ZS_m1_c', 'ZS_m1_beta', 'ZS_m1_pass', 'ZS_m1_mask']]):
+        lines += "ZSmOne:\n"
+        for i in range(12):
+            lines += f"  {i}:\n"
+            if 'ZS_m1_c' in i2c:
+                lines += f"    zs_c_i_m:\n"
+                lines += f"      [{','.join([f'{x}' for x in i2c['ZS_m1_c'][i]])}]\n"
+            if 'ZS_m1_beta' in i2c:
+                lines += f"    zs_beta_m:\n"
+                lines += f"      [{','.join([f'{x}' for x in i2c['ZS_m1_beta'][i]])}]\n"
+            if 'ZS_m1_pass' in i2c:
+                lines += f"    zs_pass_i_m:\n"
+                lines += f"      [{','.join([f'{x:b}' for x in i2c['ZS_m1_pass'][i]])}]\n"
+            if 'ZS_m1_mask' in i2c:
+                lines += f"    zs_mask_i_m:\n"
+                lines += f"      [{','.join([f'{x:b}' for x in i2c['ZS_m1_mask'][i]])}]\n"
 
 
-    lines += "ZSmOne:\n"
-    for i in range(12):
-        lines += f"  {i}:\n"
-        lines += f"    zs_c_i_m:\n"
-        lines += f"      [{','.join([f'{x}' for x in i2c.ZS_m1_c[i]])}]\n"
-        lines += f"    zs_beta_m:\n"
-        lines += f"      [{','.join([f'{x}' for x in i2c.ZS_m1_beta[i]])}]\n"
-        lines += f"    zs_pass_i_m:\n"
-        lines += f"      [{','.join([f'{x:b}' for x in i2c.ZS_m1_pass[i]])}]\n"
-        lines += f"    zs_mask_i_m:\n"
-        lines += f"      [{','.join([f'{x:b}' for x in i2c.ZS_m1_mask[i]])}]\n"
-
-
-    lines += "ELinkProcessors:\n"
-    lines += "  Global:\n"
-    lines += "    cm_erx_route:\n"
-    lines +=f"      0x{''.join([f'{x:X}' for x in i2c.CM_eRX_Route])}\n"
-    lines += "    cm_selection_x:\n"
-    lines += f"      [{','.join([f'{x}' for x in i2c.CM_Selections])}]\n"
-    lines += "    cm_user_def_x:\n"
-    lines += f"      [{','.join([f'{x}' for x in i2c.CM_UserDef])}]\n"
-    lines += "    v_reconstruct_thresh:\n"
-    lines += f"      {i2c.VReconstruct_thresh}\n"
-    lines += "    recon_mode_result:\n"
-    lines += f"      {i2c.EBO_ReconMode}\n"
+    if any([x in i2c.keys() for x in ['CM_eRX_Route', 'CM_Selections', 'CM_UserDef', 'VReconstruct_thresh', 'EBO_ReconMode']]):
+        lines += "ELinkProcessors:\n"
+        lines += "  Global:\n"
+        if 'CM_eRX_Route' in i2c:
+            lines += "    cm_erx_route:\n"
+            lines +=f"      0x{''.join([f'{x:X}' for x in i2c['CM_eRX_Route']])}\n"
+        if 'CM_Selections' in i2c:
+            lines += "    cm_selection_x:\n"
+            lines += f"      [{','.join([f'{x}' for x in i2c['CM_Selections']])}]\n"
+        if 'CM_UserDef' in i2c:
+            lines += "    cm_user_def_x:\n"
+            lines += f"      [{','.join([f'{x}' for x in i2c['CM_UserDef']])}]\n"
+        if 'VReconstruct_thresh' in i2c:
+            lines += "    v_reconstruct_thresh:\n"
+            lines += f"      {i2c['VReconstruct_thresh']}\n"
+        if 'EBO_ReconMode' in i2c:
+            lines += "    recon_mode_result:\n"
+            lines += f"      {i2c['EBO_ReconMode']}\n"
 
 
 
-    lines += "RocDaqCtrl:\n"
-    lines += "  Global:\n"
-    lines += "    active_erxs:\n"
-    lines +=f"      0x{int(''.join([f'{x:b}' for x in i2c.ERx_active]),2):03X}\n"
-    lines += "    simple_mode:\n"
-    lines +=f"      {i2c.SimpleMode:b}\n"
-    lines += "    pass_thru_mode:\n"
-    lines +=f"      {i2c.PassThruMode:b}\n"
-    lines += "    match_threshold:\n"
-    lines +=f"      0x{i2c.Match_thresh}\n"
-    lines += "    first_sync_header:\n"
-    lines +=f"      0x{i2c.ROC_FirstSyncHeader}\n"
-    lines += "    sync_header:\n"
-    lines +=f"      0x{i2c.ROC_SyncHeader}\n"
-    lines += "    sync_body:\n"
-    lines +=f"      0x{i2c.ROC_SyncBody}\n"
-    lines += "    hgcroc_hdr_marker:\n"
-    lines +=f"      0x{i2c.ROC_HdrMarker}\n"
+    if any([x in i2c.keys() for x in ['ERx_active', 'SimpleMode', 'PassThruMode', 'Match_thresh', 'ROC_FirstSyncHeader', 'ROC_SyncHeader', 'ROC_SyncBody', 'ROC_HdrMarker']]):
+        lines += "RocDaqCtrl:\n"
+        lines += "  Global:\n"
+        if 'ERx_active' in i2c:
+            lines += "    active_erxs:\n"
+            lines +=f"      0x{int(''.join([f'{x:b}' for x in i2c['ERx_active']]),2):03X}\n"
+        if 'SimpleMode' in i2c:
+            lines += "    simple_mode:\n"
+            lines +=f"      {i2c['SimpleMode']:b}\n"
+        if 'PassThruMode' in i2c:
+            lines += "    pass_thru_mode:\n"
+            lines +=f"      {i2c['PassThruMode']:b}\n"
+        if 'Match_thresh' in i2c:
+            lines += "    match_threshold:\n"
+            lines +=f"      0x{i2c['Match_thresh']}\n"
+        if 'ROC_FirstSyncHeader' in i2c:
+            lines += "    first_sync_header:\n"
+            lines +=f"      0x{i2c['ROC_FirstSyncHeader']}\n"
+        if 'ROC_SyncHeader' in i2c:
+            lines += "    sync_header:\n"
+            lines +=f"      0x{i2c['ROC_SyncHeader']}\n"
+        if 'ROC_SyncBody' in i2c:
+            lines += "    sync_body:\n"
+            lines +=f"      0x{i2c['ROC_SyncBody']}\n"
+        if 'ROC_HdrMarker' in i2c:
+            lines += "    hgcroc_hdr_marker:\n"
+            lines +=f"      0x{i2c['ROC_HdrMarker']}\n"
 
 
-    lines += "FormatterBuffer:\n"
-    lines += "  Global:\n"
-    lines += "    active_etxs:\n"
-    lines +=f"      0x{int(''.join([f'{x:b}' for x in i2c.ETx_active]),2):02X}\n"
-    lines += "    idle_pattern:\n"
-    lines +=f"      0x{i2c.IdlePattern}\n"
-    lines += "    header_marker:\n"
-    lines +=f"      0x{i2c.HeaderMarker}\n"
+    if any([x in i2c.keys() for x in ['ETx_active', 'IdlePattern', 'HeaderMarker']]):
+        lines += "FormatterBuffer:\n"
+        lines += "  Global:\n"
+        if 'ETx_active' in i2c:
+            lines += "    active_etxs:\n"
+            lines +=f"      0x{int(''.join([f'{x:b}' for x in i2c['ETx_active']]),2):02X}\n"
+        if 'IdlePattern' in i2c:
+            lines += "    idle_pattern:\n"
+            lines +=f"      0x{i2c['IdlePattern']}\n"
+        if 'HeaderMarker' in i2c:
+            lines += "    header_marker:\n"
+            lines +=f"      0x{i2c['HeaderMarker']}\n"
 
-    lines += "RocDaqCtrl:\n"
-    lines += "  Global:\n"
-    lines += "    active_erxs:\n"
-    lines +=f"      0x{int(''.join([f'{x:b}' for x in i2c.ERx_active]),2):03X}\n"
-    lines += "    simple_mode:\n"
-    lines +=f"      {i2c.SimpleMode:b}\n"
-    lines += "    pass_thru_mode:\n"
-    lines +=f"      {i2c.PassThruMode:b}\n"
-    lines += "    match_threshold:\n"
-    lines +=f"      0x{i2c.Match_thresh}\n"
-    lines += "    first_sync_header:\n"
-    lines +=f"      0x{i2c.ROC_FirstSyncHeader}\n"
-    lines += "    sync_header:\n"
-    lines +=f"      0x{i2c.ROC_SyncHeader}\n"
-    lines += "    sync_body:\n"
-    lines +=f"      0x{i2c.ROC_SyncBody}\n"
-    lines += "    hgcroc_hdr_marker:\n"
-    lines +=f"      0x{i2c.ROC_HdrMarker}\n"
+#     if any([x in i2cDict.keys() for x in ['ERx_active', 'SimpleMode', 'PassThruMode', 'Match_thresh', 'ROC_FirstSyncHeader', 'ROC_SyncHeader', 'ROC_SyncBody', 'ROC_HdrMarker']]):
+#         lines += "RocDaqCtrl:\n"
+#         lines += "  Global:\n"
+#         if 'ERx_active' in i2c:
+#             lines += "    active_erxs:\n"
+#             lines +=f"      0x{int(''.join([f'{x:b}' for x in i2c.ERx_active]),2):03X}\n"
+#         if 'SimpleMode' in i2c:
+#             lines += "    simple_mode:\n"
+#             lines +=f"      {i2c.SimpleMode:b}\n"
+#         if 'PassThruMode' in i2c:
+#             lines += "    pass_thru_mode:\n"
+#             lines +=f"      {i2c.PassThruMode:b}\n"
+#         if 'Match_thresh' in i2c:
+#             lines += "    match_threshold:\n"
+#             lines +=f"      0x{i2c.Match_thresh}\n"
+#         if 'ROC_FirstSyncHeader' in i2c:
+#             lines += "    first_sync_header:\n"
+#             lines +=f"      0x{i2c.ROC_FirstSyncHeader}\n"
+#         if 'ROC_SyncHeader' in i2c:
+#             lines += "    sync_header:\n"
+#             lines +=f"      0x{i2c.ROC_SyncHeader}\n"
+#         if 'ROC_SyncBody' in i2c:
+#             lines += "    sync_body:\n"
+#             lines +=f"      0x{i2c.ROC_SyncBody}\n"
+#         if 'ROC_HdrMarker' in i2c:
+#             lines += "    hgcroc_hdr_marker:\n"
+#             lines +=f"      0x{i2c.ROC_HdrMarker}\n"
 
 
-    lines += "FormatterBuffer:\n"
-    lines += "  Global:\n"
-    lines += "    active_etxs:\n"
-    lines +=f"      0x{int(''.join([f'{x:b}' for x in i2c.ETx_active]),2):02X}\n"
-    lines += "    idle_pattern:\n"
-    lines +=f"      0x{i2c.IdlePattern}\n"
-    lines += "    header_marker:\n"
-    lines +=f"      0x{i2c.HeaderMarker}\n"
+#     lines += "FormatterBuffer:\n"
+#     lines += "  Global:\n"
+#     lines += "    active_etxs:\n"
+#     lines +=f"      0x{int(''.join([f'{x:b}' for x in i2c.ETx_active]),2):02X}\n"
+#     lines += "    idle_pattern:\n"
+#     lines +=f"      0x{i2c.IdlePattern}\n"
+#     lines += "    header_marker:\n"
+#     lines +=f"      0x{i2c.HeaderMarker}\n"
 
     with open(yamlName,'w') as _file:
         _file.write(lines)
