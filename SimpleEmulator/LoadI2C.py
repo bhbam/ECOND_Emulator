@@ -60,9 +60,6 @@ def defaultI2Csettings():
 
     i2c['ZS_ce']=0x0
 
-    ZS_Constants=i2cValues[[f'I2C_RW_eRX_ZS_Constants_eRX{i}' for i in range(12)]].apply(int,base=16).values
-    ZS_M1_Constants=i2cValues[[f'I2C_RW_eRX_ZS_M1_Constants_eRX{i}' for i in range(12)]].apply(int,base=16).values
-
     i2c['ZS_lambda']=np.array([0x20]*12*37).reshape(12,37)
     i2c['ZS_kappa']=np.array([0]*12*37).reshape(12,37)
     i2c['ZS_c']=np.array([255]*12*37).reshape(12,37)
